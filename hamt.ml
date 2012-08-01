@@ -189,12 +189,12 @@ let rec alter_node shift update hash key = function
       let child' = alter_node (shift + shift_step) update hash key child in
       match change (is_empty child) (is_empty child') with
         | Nil -> arr_node
-        | Added -> array_node (succ num_children) (set children sub_hash Empty)
+        | Added -> array_node (succ num_children) (set children sub_hash child')
         | Modified -> array_node num_children (set children sub_hash child')
         | Removed ->
             if num_children = arrnode_min then 
               pack_array_node (( = ) sub_hash) num_children children
-            else array_node (num_children - 1) (set children sub_hash child')
+            else array_node (num_children - 1) (set children sub_hash Empty)
               
 let alter update key root =
   alter_node 0 update (hash key) key root
