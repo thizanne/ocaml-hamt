@@ -1,24 +1,14 @@
 open BitUtils
 open Printf
 
-let hash = Hashtbl.hash
-
+let hash x = Hashtbl.hash x
+  
 type ('k, 'v) t =
   | Empty
   | Leaf of int * 'k * 'v
   | HashCollision of int * ('k * 'v) list
   | BitmapIndexedNode of int * ('k, 'v) t array
   | ArrayNode of int * ('k, 'v) t array
-
-let rec show pk pv = function
-  | Empty -> ()
-  | Leaf (_, k, v) -> printf "(%s, %s) " (pk k) (pv v)
-  | HashCollision (_, pairs) -> 
-      List.iter (fun (k, v) -> printf "(%s, %s)" (pk k) (pv v)) pairs
-  | BitmapIndexedNode (_, arr) -> Array.iter (show pk pv) arr
-  | ArrayNode (_, arr) -> Array.iter (show pk pv) arr
-
-let print = show (sprintf "%d") (sprintf "%d")
 
 let empty = Empty
 let leaf h k v = Leaf (h, k, v)
@@ -32,7 +22,7 @@ let is_empty x = x = Empty
 
 let rec cardinal = function
   | Empty -> 0
-  | Leaf (_, _, _) -> 0
+  | Leaf (_, _, _) -> 1
   | HashCollision (_, pairs) -> List.length pairs
   | BitmapIndexedNode (_, base) -> Array.fold_left (fun acc child -> acc + cardinal child) 0 base
   | ArrayNode (_, children) -> Array.fold_left (fun acc child -> acc + cardinal child) 0 children
@@ -141,7 +131,7 @@ let change old_is_empty new_is_empty =
     if new_is_empty then Removed
     else Modified
       
-let rec alter_node shift update hash key = function
+let rec alter_node shift hash key update = function
   | Empty -> 
       option Empty (leaf hash key) (update None)
   | Leaf (h, k, v) as leaf1 ->
@@ -164,13 +154,12 @@ let rec alter_node shift update hash key = function
       let bit = to_bitmap sub_hash in
       let not_exists = bitmap land bit = 0 in
       let child = if not_exists then Empty else base.(ix) in
-      let child = alter_node (shift + shift_step) update hash key child in
+      let child = alter_node (shift + shift_step) hash key update child in
       begin
         match change not_exists (is_empty child) with
           | Nil -> bm_node
           | Modified -> 
-              let base = Array.copy base in
-              base.(ix) <- child; bitmap_indexed_node bitmap base
+              bitmap_indexed_node bitmap (set base ix child)
           | Removed ->
               let bitmap = (bitmap land (lnot bit)) land mask in
               if bitmap = 0 then Empty
@@ -186,7 +175,7 @@ let rec alter_node shift update hash key = function
   | ArrayNode (num_children, children) as arr_node ->
       let sub_hash = hash_fragment shift hash in
       let child = children.(sub_hash) in
-      let child' = alter_node (shift + shift_step) update hash key child in
+      let child' = alter_node (shift + shift_step) hash key update child in
       match change (is_empty child) (is_empty child') with
         | Nil -> arr_node
         | Added -> array_node (succ num_children) (set children sub_hash child')
@@ -196,21 +185,26 @@ let rec alter_node shift update hash key = function
               pack_array_node (( = ) sub_hash) num_children children
             else array_node (num_children - 1) (set children sub_hash Empty)
               
-let alter update key root =
-  alter_node 0 update (hash key) key root
+let alter key update hamt =
+  alter_node 0 (hash key) key update hamt
     
-let insert_with f k v hamt =
-  alter (function | None -> Some v | Some w -> Some (f w v)) k hamt
-    
-let add k v t = insert_with (fun _ _ -> v) k v t
+let add k v hamt = 
+  alter k (fun _ -> Some v) hamt
   
-let update f = alter (function | None -> None | Some v -> f v)
-
-let remove k t = alter (fun _ -> None) k t
+let remove k hamt =
+  alter k (fun _ -> None) hamt
   
-let modify _k f = alter (function | None -> None | Some v -> Some (f v))
+let update k f hamt =
+  alter k (function | None -> None | Some v -> f v) hamt
 
-let modify_def v0 _k f = alter (function | None -> Some (f v0) | Some v -> Some (f v))
+let modify k f hamt =
+  alter k (function | None -> raise Not_found | Some v -> Some (f v)) hamt
+   
+let modify_def v0 k f hamt = 
+  alter k (function | None -> Some (f v0) | Some v -> Some (f v)) hamt
+
+let adjust k f hamt =
+  alter k (function | None -> None | Some v -> Some (f v)) hamt
 
 let rec alter_hc f = function
   | [] -> []
@@ -259,13 +253,20 @@ and alter_all f = function
       then pack_array_node (fun _ -> false) num_children children
       else ArrayNode (num_children, children)
 
-let map f = alter_all (fun _k v -> Some (f v))
-let filter f = alter_all (fun _k v -> if f v then Some v else None)
+let map f hamt = 
+  alter_all (fun _k v -> Some (f v)) hamt
 
-let filter_map = alter_all
+let filter f hamt = 
+  alter_all (fun _k v -> if f v then Some v else None) hamt
 
-let mapi f = alter_all (fun k v -> Some (f k v))
-let filteri f = alter_all (fun k v -> if f k v then Some v else None)
+let filter_map f hamt = 
+  alter_all f hamt
+
+let mapi f hamt = 
+  alter_all (fun k v -> Some (f k v)) hamt
+
+let filteri f hamt = 
+  alter_all (fun k v -> if f k v then Some v else None) hamt
 
 let rec iter f = function
   | Empty -> ()
@@ -296,30 +297,35 @@ let mem key hamt =
   with 
     | Not_found -> false
 
-let rec fold f hamt v0 =
+let rec foldi f hamt v0 =
   match hamt with
     | Empty -> v0
     | Leaf (_, k, v) -> f k v v0
     | HashCollision (_, pairs) -> 
         List.fold_right (fun (k, v) acc -> f k v acc) pairs v0
     | BitmapIndexedNode (_, base) ->
-        Array.fold_right (fold f) base v0
+        Array.fold_right (foldi f) base v0
     | ArrayNode (_, children) ->
-        Array.fold_right (fold f) children v0
+        Array.fold_right (foldi f) children v0
+
+let fold f hamt v0 = 
+  foldi (fun k v acc -> f v acc) hamt v0
 
 let to_assoc hamt = 
-  fold (fun k v acc -> (k, v) :: acc) hamt []
+  foldi (fun k v acc -> (k, v) :: acc) hamt []
 
-let bindings = to_assoc
+let bindings hamt = to_assoc hamt
 
 let of_assoc hamt =
   List.fold_left (fun acc (k, v) -> add k v acc) empty hamt
 
 let for_all f hamt = 
-  fold (fun k v acc -> f k v && acc) hamt true
+  foldi (fun k v acc -> f k v && acc) hamt true
 
 let exists f hamt =
-  fold (fun k v acc -> f k v || acc) hamt false
+  foldi (fun k v acc -> f k v || acc) hamt false
+
+let exists_f = exists
 
 let rec choose = function
   | Empty -> raise Not_found
