@@ -13,17 +13,11 @@ let ctpop map =
   in let map = map + map lsr 8
      in (map + map lsr 16) land 0x3f
 
-(*
-  Given a subhash, returns a bitmap with a one-bit at the corresponding position
-*)
-let to_bitmap sub_hash = 
-  1 lsl sub_hash
-
 (* 
    Given a bitmap and a subhash, returns the index into the list 
 *)
 let from_bitmap bitmap sub_hash =
-  let mask = pred (to_bitmap sub_hash) in
+  let mask = pred (1 lsl sub_hash) in
   ctpop (bitmap land mask)
 
 (*
