@@ -360,3 +360,33 @@ let rec choose = function
       let rec loop n =
         if children.(n) = Empty then loop (succ n) else children.(n)
       in choose (loop 0)
+
+
+module Import =
+
+struct
+
+  module type FOLDABLE = sig
+    type key
+    type 'v t
+    val fold : (key -> 'v -> 'a -> 'a) -> 'v t -> 'a -> 'a
+  end
+
+  module Make (M : FOLDABLE) =
+  struct
+    let import x = M.fold add x Empty
+  end
+
+  module List =
+  struct
+    let import assoc =
+      List.fold_left
+        (fun acc (k, v) -> alter_node true 0 (hash k) k (fun _ -> Some v) acc) Empty assoc
+  end
+
+  module Map =
+  struct
+    let import x = Map.foldi add x Empty
+  end
+
+end
