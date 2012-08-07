@@ -340,8 +340,8 @@ let to_assoc hamt =
 let bindings hamt = to_assoc hamt
 
 let of_assoc assoc =
-  List.fold_right
-    (fun (k, v) acc -> alter_node true 0 (hash k) k (fun _ -> Some v) acc) assoc Empty
+  List.fold_left
+    (fun acc (k, v) -> alter_node true 0 (hash k) k (fun _ -> Some v) acc) Empty assoc
 
 let for_all f hamt =
   foldi (fun k v acc -> f k v && acc) hamt true
