@@ -66,23 +66,24 @@ let set tab ix v =
   tab'.(ix) <- v;
   tab'
 
-let rec combine_leaves shift leaf1 leaf2 =
-  match (leaf1, leaf2) with
-    | Leaf (h1, k1, v1), Leaf (h2, k2, v2) ->
-        if h1 = h2 then HashCollision (h1, [k1, v1; k2, v2])
-        else
-          let sub_h1 = hash_fragment shift h1 in
-          let sub_h2 = hash_fragment shift h2 in
-          let (nodeA, nodeB) =
-            if sub_h1 < sub_h2 then (leaf1, leaf2) else (leaf2, leaf1) in
-          let bitmap = (1 lsl sub_h1) lor (1 lsl sub_h2) in
-          BitmapIndexedNode (
-            bitmap,
-            if sub_h1 = sub_h2
-            then [|(combine_leaves (shift + shift_step) leaf1 leaf2)|]
-            else [|nodeA; nodeB|]
-          )
-    |_, _ -> failwith "combine_leaves"
+let rec combine_tip shift node1 node2 =
+  match (node1, node2) with
+    | Leaf (h1, k1, v1), Leaf (h2, k2, v2) when h1 = h2 ->
+        HashCollision (h1, [k1, v1; k2, v2])
+    | Leaf (h1, _, _), Leaf (h2, _, _) | Leaf (h1, _, _), HashCollision (h2, _) ->
+        let sub_h1 = hash_fragment shift h1 in
+        let sub_h2 = hash_fragment shift h2 in
+        let (nodeA, nodeB) =
+          if sub_h1 < sub_h2 then (node1, node2) else (node2, node1) in
+        let bitmap = (1 lsl sub_h1) lor (1 lsl sub_h2) in
+        BitmapIndexedNode (
+          bitmap,
+          if sub_h1 = sub_h2
+          then [|(combine_tip (shift + shift_step) node1 node2)|]
+          else [|nodeA; nodeB|]
+        )
+    | HashCollision (_, _), Leaf (_, _, _) -> combine_tip shift node2 node1
+    | _ -> failwith "combine_tip"
 
 let rec update_list update k = function
   | [] -> option [] (fun v -> [k, v]) (update None)
@@ -131,7 +132,7 @@ let change old_is_empty new_is_empty =
     if new_is_empty then Removed
     else Modified
 
-let rec alter_node mute shift hash key update = function
+let rec alter_node ?(mute=true) shift hash key update = function
   | Empty ->
       option Empty (leaf hash key) (update None)
   | Leaf (h, k, v) as leaf1 ->
@@ -139,22 +140,27 @@ let rec alter_node mute shift hash key update = function
       then option Empty (leaf h k) (update (Some v))
       else
         option leaf1
-          (fun x -> combine_leaves shift leaf1 (leaf hash key x))
+          (fun x -> combine_tip shift leaf1 (Leaf (hash, key, x)))
           (update None)
-  | HashCollision (h, pairs) ->
+  | HashCollision (h, pairs) as hash_collision ->
+      if hash = h then
       let pairs = update_list update key pairs in begin
         match pairs with
           | [] -> failwith "alter_node" (* Should never happen *)
           | [(k, v)] -> leaf h k v
           | _ -> HashCollision (h, pairs)
       end
+      else
+        option hash_collision
+          (fun x -> combine_tip shift (Leaf (hash, key, x)) hash_collision)
+          (update None)
   | BitmapIndexedNode (bitmap, base) as bm_node ->
       let sub_hash = hash_fragment shift hash in
       let ix = from_bitmap bitmap sub_hash in
       let bit = 1 lsl sub_hash in
       let not_exists = bitmap land bit = 0 in
       let child = if not_exists then Empty else base.(ix) in
-      let child = alter_node mute (shift + shift_step) hash key update child in
+      let child = alter_node ~mute (shift + shift_step) hash key update child in
       begin
         match change not_exists (child = Empty) with
           | Nil -> bm_node
@@ -176,7 +182,7 @@ let rec alter_node mute shift hash key update = function
   | ArrayNode (num_children, children) as arr_node ->
       let sub_hash = hash_fragment shift hash in
       let child = children.(sub_hash) in
-      let child' = alter_node mute (shift + shift_step) hash key update child in
+      let child' = alter_node ~mute (shift + shift_step) hash key update child in
       match change (child = Empty) (child' = Empty) with
         | Nil -> arr_node
         | Added ->
@@ -207,8 +213,11 @@ let rec copy hamt = match hamt with
   | ArrayNode (num_children, children) ->
       ArrayNode (num_children, Array.map copy children)
 
+let alter_mute ?(shift=0) key update hamt =
+  alter_node shift (hash key) key update hamt
+
 let alter key update hamt =
-  alter_node false 0 (hash key) key update hamt
+  alter_node ~mute:false 0 (hash key) key update hamt
 
 let add k v hamt =
   alter k (fun _ -> Some v) hamt
@@ -339,10 +348,6 @@ let to_assoc hamt =
 
 let bindings hamt = to_assoc hamt
 
-let of_assoc assoc =
-  List.fold_left
-    (fun acc (k, v) -> alter_node true 0 (hash k) k (fun _ -> Some v) acc) Empty assoc
-
 let for_all f hamt =
   foldi (fun k v acc -> f k v && acc) hamt true
 
@@ -381,7 +386,9 @@ struct
   struct
     let import assoc =
       List.fold_left
-        (fun acc (k, v) -> alter_node true 0 (hash k) k (fun _ -> Some v) acc) Empty assoc
+        (fun acc (k, v) ->
+          alter_mute k (fun _ -> Some v) acc)
+        Empty assoc
   end
 
   module Map =
