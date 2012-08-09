@@ -21,7 +21,7 @@ let from_bitmap bitmap sub_hash =
   ctpop (bitmap land mask)
 
 (*
-  Given a bitmap, returns the list if indices where a one-bit is present
+  Given a bitmap, returns the list of indices where a one-bit is present
 *)
 let bitmap_to_indices bitmap =
   let rec loop ix bitmap =
