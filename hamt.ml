@@ -379,21 +379,29 @@ struct
 
   module Make (M : FOLDABLE) =
   struct
-    let import x = M.fold add x Empty
+    let add_import x hamt = M.fold add x (copy hamt)
+    let import x = add_import x Empty
   end
 
   module List =
   struct
-    let import assoc =
+    let add_import assoc hamt =
       List.fold_left
         (fun acc (k, v) ->
           alter_mute k (fun _ -> Some v) acc)
-        Empty assoc
+        (copy hamt) assoc
+
+    let import assoc = add_import assoc Empty
   end
 
   module Map =
   struct
-    let import x = Map.foldi add x Empty
+    let add_import x hamt =
+      Map.foldi (fun k v acc ->
+        alter_mute k (fun _ -> Some v) acc)
+        x (copy hamt)
+
+    let import x = add_import x Empty
   end
 
 end
