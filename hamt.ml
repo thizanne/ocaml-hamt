@@ -14,6 +14,11 @@ let empty = Empty
 
 let leaf h k v = Leaf (h, k, v)
 
+let node_children = function
+  | BitmapIndexedNode (_, base) -> base
+  | ArrayNode (_, children) -> children
+  | _ -> failwith "children"
+
 let singleton k v = Leaf (hash k, k, v)
 
 let is_empty x = x = Empty
@@ -39,8 +44,8 @@ let node_hash = function
 let shift_step = 5
 let chunk = 1 lsl shift_step
 let mask = pred chunk
-let bmnode_max = 16 (* Maximum size of a BitmapIndexedNode *)
-let arrnode_min = 9 (* Minimum size of an ArrayNode *)
+let bmnode_max = chunk / 2 (* Maximum size of a BitmapIndexedNode *)
+let arrnode_min = bmnode_max / 2 (* Minimum size of an ArrayNode *)
 
 let hash_fragment shift h = (h asr shift) land mask
 
@@ -110,7 +115,7 @@ let pack_array_node to_remove num_children children =
   let rec loop ix jx bitmap =
     if ix = chunk then BitmapIndexedNode (bitmap, base)
     else if
-         children.(ix) = Empty || to_remove ix
+        children.(ix) = Empty || to_remove ix
     then loop (succ ix) jx bitmap
     else begin
       base.(jx) <- children.(ix);
@@ -132,7 +137,7 @@ let change old_is_empty new_is_empty =
     if new_is_empty then Removed
     else Modified
 
-let rec alter_node ?(mute=true) shift hash key update = function
+let rec alter_node ?(mute=false) shift hash key update = function
   | Empty ->
       option Empty (leaf hash key) (update None)
   | Leaf (h, k, v) as leaf1 ->
@@ -144,12 +149,12 @@ let rec alter_node ?(mute=true) shift hash key update = function
           (update None)
   | HashCollision (h, pairs) as hash_collision ->
       if hash = h then
-      let pairs = update_list update key pairs in begin
-        match pairs with
-          | [] -> failwith "alter_node" (* Should never happen *)
-          | [(k, v)] -> leaf h k v
-          | _ -> HashCollision (h, pairs)
-      end
+        let pairs = update_list update key pairs in begin
+          match pairs with
+            | [] -> failwith "alter_node" (* Should never happen *)
+            | [(k, v)] -> leaf h k v
+            | _ -> HashCollision (h, pairs)
+        end
       else
         option hash_collision
           (fun x -> combine_tip shift (Leaf (hash, key, x)) hash_collision)
@@ -214,10 +219,10 @@ let rec copy hamt = match hamt with
       ArrayNode (num_children, Array.map copy children)
 
 let alter_mute ?(shift=0) key update hamt =
-  alter_node shift (hash key) key update hamt
+  alter_node ~mute:true shift (hash key) key update hamt
 
 let alter key update hamt =
-  alter_node ~mute:false 0 (hash key) key update hamt
+  alter_node 0 (hash key) key update hamt
 
 let add k v hamt =
   alter k (fun _ -> Some v) hamt
@@ -259,7 +264,7 @@ and alter_bmnode f indices base =
         end
   in aux 0 indices
 
-and alter_all f = function
+and alter_all ?(mute=false) f = function
   | Empty -> Empty
   | Leaf (h, k, v) -> option Empty (leaf h k) (f k v)
   | HashCollision (h, pairs) ->
@@ -397,7 +402,7 @@ struct
   module Map =
   struct
     let add_import x hamt =
-      Map.foldi (fun k v acc ->
+      BatMap.foldi (fun k v acc ->
         alter_mute k (fun _ -> Some v) acc)
         x (copy hamt)
 
@@ -405,3 +410,144 @@ struct
   end
 
 end
+
+let array_of_rev_list li =
+  let a = Array.make (List.length li) (List.hd li) in
+  let rec aux n = function
+    | [] -> ()
+    | x :: xs -> a.(n) <- x; aux (pred n) xs
+  in aux (pred (Array.length a)) li;
+  a
+
+let rec intersect_array shift f children1 children2 num_children i =
+  if i = chunk then
+    if num_children < arrnode_min then
+      let node =
+        pack_array_node (fun _ -> false) num_children children1 in
+      if num_children = 1 then
+        let base = node_children node in
+        if is_tip_node base.(0) then base.(0)
+        else node
+      else node
+    else ArrayNode (num_children, children1)
+  else
+    let child =
+      intersect_node shift f children1.(i) children2.(i) in
+    children1.(i) <- child;
+    intersect_array shift f children1 children2
+      (if child = Empty then num_children else succ num_children) (succ i)
+
+and intersect_bitmap shift f li1 li2 n1 n2 base1 base2 acc =
+  match (li1, li2) with
+    | [], _ | _, [] -> acc
+    | x :: xs, y :: ys ->
+        if x < y
+        then intersect_bitmap shift f xs li2 (succ n1) n2 base1 base2 acc
+        else if x > y
+        then intersect_bitmap shift f li1 ys n1 (succ n2) base1 base2 acc
+        else
+          let child =
+            intersect_node shift f base1.(n1) base2.(n2) in
+          intersect_bitmap shift f xs ys (succ n1) (succ n2) base1 base2
+            (if child = Empty then acc else child :: acc)
+
+and intersect_bitmap_array shift f bitmap base num_children children n =
+  if n = Array.length children then
+    if num_children < arrnode_min
+    then let node =
+           pack_array_node (fun _ -> false) num_children children in
+         if num_children = 1 then
+           let base = node_children node in
+           if  is_tip_node base.(0) then base.(0)
+           else node
+         else node
+    else ArrayNode (num_children, children)
+  else
+    if children.(n) = Empty
+    then intersect_bitmap_array
+      shift f bitmap base num_children children (succ n)
+    else
+      let bit = 1 lsl n in
+      if bitmap land bit = 0
+      then begin
+        children.(n) <- Empty;
+        intersect_bitmap_array
+          shift f bitmap base num_children children (succ n)
+      end
+      else begin
+        let child =
+          intersect_node shift f
+            base.(ctpop (bitmap land (pred bit))) children.(n) in
+        children.(n) <- child;
+        intersect_bitmap_array shift f bitmap base
+          (if child = Empty then num_children else succ num_children)
+          children (succ n)
+      end
+
+and intersect_node shift f t1 t2 = match (t1, t2) with
+  | Empty, _ -> Empty
+  | Leaf (h, k, v), _ ->
+      begin
+        try let w = find k t2 in Leaf (h, k, f v w)
+        with Not_found -> Empty
+      end
+  | HashCollision (h1, li1), HashCollision (h2, li2)->
+      if h1 <> h2
+      then Empty
+      else
+        begin
+          match
+            List.fold_left
+              (fun acc (k, v) ->
+                try
+                  let w = List.assoc k li2 in
+                  (k, f v w) :: acc
+                with Not_found -> acc
+              )
+              [] li1
+          with
+            | [] -> Empty
+            | [(k, v)] -> Leaf (h1, k, v)
+            | li -> HashCollision (h1, li)
+        end
+  | HashCollision (h, li), BitmapIndexedNode (bitmap, base) ->
+      let bit = 1 lsl (hash_fragment shift h) in
+      if bitmap land bit = 0 then Empty
+      else
+        let n = ctpop (bitmap land (pred bit)) in
+        let node = intersect_node (shift + shift_step) f t1 base.(n) in
+        if is_tip_node node then node
+        else BitmapIndexedNode (bit, [|node|])
+  | HashCollision (h, li), ArrayNode (num_children, children) ->
+      let fragment = hash_fragment shift h in
+      if children.(fragment) = Empty then Empty
+      else
+        let child =
+          intersect_node (shift + shift_step) f t1 children.(fragment) in
+        if is_tip_node child then child
+        else BitmapIndexedNode (1 lsl fragment, [|child|])
+  | BitmapIndexedNode (bitmap1, base1), BitmapIndexedNode (bitmap2, base2) ->
+      let bitmap = bitmap1 land bitmap2 in
+      if bitmap = 0 then Empty
+      else begin
+        match
+          intersect_bitmap (shift + shift_step) f
+            (bitmap_to_indices bitmap1)
+            (bitmap_to_indices bitmap2)
+            0 0 base1 base2 []
+        with
+          | [] -> Empty
+          | [x] when is_tip_node x -> x
+          | base -> BitmapIndexedNode (bitmap, array_of_rev_list base)
+      end
+  | ArrayNode (num1, children1), ArrayNode (num2, children2) ->
+      intersect_array (shift + shift_step) f children1 children2 0 0
+  | BitmapIndexedNode (bitmap, base), ArrayNode (num_children, children) ->
+      intersect_bitmap_array
+        (shift + shift_step) f bitmap base num_children children 0
+
+  | _, _ -> intersect_node shift (fun x y -> f y x) t2 t1
+
+let intersect f t1 t2 =
+  let t2 = copy t2 in
+  intersect_node 0 f t1 t2
