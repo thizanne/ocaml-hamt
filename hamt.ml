@@ -41,9 +41,9 @@ let node_hash = function
   | HashCollision (h, _) -> h
   | _ -> failwith "node_hash"
 
-let shift_step = 5
-let chunk = 1 lsl shift_step
-let mask = pred chunk
+let shift_step = 5 (* Number of bits taken from the hashed key at every step *)
+let chunk = 1 lsl shift_step (* Branching factor of the structure *)
+let mask = pred chunk (* Mask of shift_step `1` bits *)
 let bmnode_max = chunk / 2 (* Maximum size of a BitmapIndexedNode *)
 let arrnode_min = bmnode_max / 2 (* Minimum size of an ArrayNode *)
 
