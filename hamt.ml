@@ -41,11 +41,20 @@ let node_hash = function
   | HashCollision (h, _) -> h
   | _ -> failwith "node_hash"
 
-let shift_step = 5 (* Number of bits taken from the hashed key at every step *)
-let chunk = 1 lsl shift_step (* Branching factor of the structure *)
-let mask = pred chunk (* Mask of shift_step `1` bits *)
-let bmnode_max = chunk / 2 (* Maximum size of a BitmapIndexedNode *)
-let arrnode_min = bmnode_max / 2 (* Minimum size of an ArrayNode *)
+(* Number of bits taken from the hashed key at every step *)
+let shift_step = 5
+
+(* Branching factor of the structure *)
+let chunk = 1 lsl shift_step
+
+(* Mask of shift_step `1` bits *)
+let mask = pred chunk
+
+(* Maximum size of a BitmapIndexedNode, arbitrary *)
+let bmnode_max = chunk / 2
+
+(* Minimum size of an ArrayNode, arbitrary (lesser than bmnode_max) *)
+let arrnode_min = bmnode_max / 2
 
 let hash_fragment shift h = (h asr shift) land mask
 
@@ -59,14 +68,14 @@ let remove tab ix =
   Array.blit tab (succ ix) tab' ix (Array.length tab - ix - 1);
   tab'
 
-let add tab ix v =
+let add_tab tab ix v =
   let tab' = Array.make (Array.length tab + 1) Empty in
   Array.blit tab 0 tab' 0 ix;
   Array.blit tab ix tab' (succ ix) (Array.length tab - ix);
   tab'.(ix) <- v;
   tab'
 
-let set tab ix v =
+let set_tab tab ix v =
   let tab' = Array.copy tab in
   tab'.(ix) <- v;
   tab'
@@ -84,7 +93,7 @@ let rec combine_tip shift node1 node2 =
         BitmapIndexedNode (
           bitmap,
           if sub_h1 = sub_h2
-          then [|(combine_tip (shift + shift_step) node1 node2)|]
+          then [|combine_tip (shift + shift_step) node1 node2|]
           else [|nodeA; nodeB|]
         )
     | HashCollision (_, _), Leaf (_, _, _) -> combine_tip shift node2 node1
@@ -171,7 +180,7 @@ let rec alter_node ?(mute=false) shift hash key update = function
           | Nil -> bm_node
           | Modified ->
               if mute then begin base.(ix) <- child; bm_node end
-              else BitmapIndexedNode (bitmap, set base ix child)
+              else BitmapIndexedNode (bitmap, set_tab base ix child)
           | Removed ->
               let bitmap = (bitmap land (lnot bit)) land mask in
               if bitmap = 0 then Empty
@@ -182,7 +191,7 @@ let rec alter_node ?(mute=false) shift hash key update = function
           | Added ->
               if Array.length base = bmnode_max
               then expand_bitmap_node sub_hash child bitmap base
-              else BitmapIndexedNode (bitmap lor bit, add base ix child)
+              else BitmapIndexedNode (bitmap lor bit, add_tab base ix child)
       end
   | ArrayNode (num_children, children) as arr_node ->
       let sub_hash = hash_fragment shift hash in
@@ -196,10 +205,10 @@ let rec alter_node ?(mute=false) shift hash key update = function
                 children.(sub_hash) <- child';
                 ArrayNode (succ num_children, children)
               end
-            else ArrayNode (succ num_children, set children sub_hash child')
+            else ArrayNode (succ num_children, set_tab children sub_hash child')
         | Modified ->
             if mute then begin children.(sub_hash) <- child'; arr_node end
-            else ArrayNode (num_children, set children sub_hash child')
+            else ArrayNode (num_children, set_tab children sub_hash child')
         | Removed ->
             if num_children = arrnode_min then
               pack_array_node (( = ) sub_hash) num_children children
@@ -209,7 +218,7 @@ let rec alter_node ?(mute=false) shift hash key update = function
                   children.(sub_hash) <- Empty;
                   ArrayNode (pred num_children, children)
                 end
-              else ArrayNode (pred num_children, set children sub_hash Empty)
+              else ArrayNode (pred num_children, set_tab children sub_hash Empty)
 
 let rec copy hamt = match hamt with
   | Empty | Leaf (_, _, _) | HashCollision (_, _) -> hamt
@@ -346,7 +355,7 @@ let rec foldi f hamt v0 =
         Array.fold_right (foldi f) children v0
 
 let fold f hamt v0 =
-  foldi (fun k v acc -> f v acc) hamt v0
+  foldi (fun _k v acc -> f v acc) hamt v0
 
 let to_assoc hamt =
   foldi (fun k v acc -> (k, v) :: acc) hamt []
@@ -382,6 +391,9 @@ struct
     val fold : (key -> 'v -> 'a -> 'a) -> 'v t -> 'a -> 'a
   end
 
+(*
+  * TODO : use mutability when adapted
+*)
   module Make (M : FOLDABLE) =
   struct
     let add_import x hamt = M.fold add x (copy hamt)
@@ -399,15 +411,21 @@ struct
     let import assoc = add_import assoc Empty
   end
 
+(*
+  (* Requires Batteries or something like this *)
+
   module Map =
   struct
+
     let add_import x hamt =
       BatMap.foldi (fun k v acc ->
         alter_mute k (fun _ -> Some v) acc)
         x (copy hamt)
 
     let import x = add_import x Empty
+
   end
+*)
 
 end
 
@@ -419,23 +437,21 @@ let array_of_rev_list li =
   in aux (pred (Array.length a)) li;
   a
 
-let rec intersect_array shift f children1 children2 num_children i =
-  if i = chunk then
-    if num_children < arrnode_min then
-      let node =
-        pack_array_node (fun _ -> false) num_children children1 in
-      if num_children = 1 then
-        let base = node_children node in
-        if is_tip_node base.(0) then base.(0)
-        else node
-      else node
-    else ArrayNode (num_children, children1)
-  else
-    let child =
-      intersect_node shift f children1.(i) children2.(i) in
-    children1.(i) <- child;
-    intersect_array shift f children1 children2
-      (if child = Empty then num_children else succ num_children) (succ i)
+let rec intersect_array shift f children1 children2 =
+  let num_children = ref 0 in
+  for i = 0 to mask do
+    let child = intersect_node shift f children1.(i) children2.(i) in
+    if child <> Empty then incr num_children;
+    children1.(i) <- child
+  done;
+  if !num_children < arrnode_min then
+    let node =
+      pack_array_node (fun _ -> false) !num_children children1 in
+    if !num_children = 1 then
+      let base = node_children node in
+      if is_tip_node base.(0) then base.(0) else node
+    else node
+  else ArrayNode (!num_children, children1)
 
 and intersect_bitmap shift f li1 li2 n1 n2 base1 base2 acc =
   match (li1, li2) with
@@ -451,38 +467,25 @@ and intersect_bitmap shift f li1 li2 n1 n2 base1 base2 acc =
           intersect_bitmap shift f xs ys (succ n1) (succ n2) base1 base2
             (if child = Empty then acc else child :: acc)
 
-and intersect_bitmap_array shift f bitmap base num_children children n =
-  if n = Array.length children then
-    if num_children < arrnode_min
-    then let node =
-           pack_array_node (fun _ -> false) num_children children in
-         if num_children = 1 then
-           let base = node_children node in
-           if  is_tip_node base.(0) then base.(0)
-           else node
-         else node
-    else ArrayNode (num_children, children)
-  else
-    if children.(n) = Empty
-    then intersect_bitmap_array
-      shift f bitmap base num_children children (succ n)
-    else
-      let bit = 1 lsl n in
-      if bitmap land bit = 0
-      then begin
-        children.(n) <- Empty;
-        intersect_bitmap_array
-          shift f bitmap base num_children children (succ n)
-      end
-      else begin
-        let child =
-          intersect_node shift f
-            base.(ctpop (bitmap land (pred bit))) children.(n) in
-        children.(n) <- child;
-        intersect_bitmap_array shift f bitmap base
-          (if child = Empty then num_children else succ num_children)
-          children (succ n)
-      end
+and intersect_bitmap_array shift f bitmap base children =
+  let num_children = ref 0 in
+  for i = 0 to mask do
+    if children.(i) <> Empty then
+      let bit = bitmap land (1 lsl i) in
+      if bit <> 0 then
+        children.(i) <- intersect_node shift f
+          base.(ctpop (bitmap land pred bit)) children.(i);
+      incr num_children
+  done;
+  if !num_children < arrnode_min
+  then
+    let node =
+      pack_array_node (fun _ -> false) !num_children children in
+    if !num_children = 1 then
+      let base = node_children node in
+      if is_tip_node base.(0) then base.(0) else node
+    else node
+  else ArrayNode (!num_children, children)
 
 and intersect_node shift f t1 t2 = match (t1, t2) with
   | Empty, _ -> Empty
@@ -541,11 +544,10 @@ and intersect_node shift f t1 t2 = match (t1, t2) with
           | base -> BitmapIndexedNode (bitmap, array_of_rev_list base)
       end
   | ArrayNode (num1, children1), ArrayNode (num2, children2) ->
-      intersect_array (shift + shift_step) f children1 children2 0 0
-  | BitmapIndexedNode (bitmap, base), ArrayNode (num_children, children) ->
+      intersect_array (shift + shift_step) f children1 children2
+  | BitmapIndexedNode (bitmap, base), ArrayNode (_num_children, children) ->
       intersect_bitmap_array
-        (shift + shift_step) f bitmap base num_children children 0
-
+        (shift + shift_step) f bitmap base children
   | _, _ -> intersect_node shift (fun x y -> f y x) t2 t1
 
 let intersect f t1 t2 =
