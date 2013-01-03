@@ -444,112 +444,76 @@ let array_of_rev_list li =
   in aux (pred (Array.length a)) li;
   a
 
-let rec intersect_array shift f children1 children2 =
-  let nb_children = ref 0 in
-  for i = 0 to mask do
-    let child = intersect_node shift f children1.(i) children2.(i) in
-    if child <> Empty then incr nb_children;
-    children1.(i) <- child
-  done;
-  reify_node (ArrayNode (!nb_children, children1))
-
-and intersect_bitmap shift f li1 li2 n1 n2 base1 base2 acc =
-  match (li1, li2) with
-    | [], _ | _, [] -> acc
-    | x :: xs, y :: ys ->
-        if x < y
-        then intersect_bitmap shift f xs li2 (succ n1) n2 base1 base2 acc
-        else if x > y
-        then intersect_bitmap shift f li1 ys n1 (succ n2) base1 base2 acc
-        else
-          let child =
-            intersect_node shift f base1.(n1) base2.(n2) in
-          intersect_bitmap shift f xs ys (succ n1) (succ n2) base1 base2
-            (if child = Empty then acc else child :: acc)
-
-and intersect_bitmap_array shift f bitmap base children =
-  let nb_children = ref 0 in
-  for i = 0 to mask do
-    if children.(i) <> Empty then
-      let bit = bitmap land (1 lsl i) in
-      if bit <> 0 then
-        children.(i) <- intersect_node shift f
-          base.(ctpop (bitmap land pred bit)) children.(i);
-      incr nb_children
-  done;
-  reify_node (ArrayNode (!nb_children, children))
-
-and intersect_node shift f t1 t2 = match (t1, t2) with
-  | Empty, _ -> Empty
-  | Leaf (h, k, v), _ ->
-      begin
-        try let w = find k t2 in Leaf (h, k, f v w)
-        with Not_found -> Empty
-      end
-  | HashCollision (h1, li1), HashCollision (h2, li2)->
-      if h1 <> h2
-      then Empty
-      else
+let rec intersect_array :
+    'a 'b. int -> ('a -> 'b -> 'c) -> ('k, 'a) t array -> ('k, 'b) t array -> ('k, 'c) t =
+  fun shift f children1 children2 ->
+    let children = Array.make chunk Empty
+    and nb_children = ref 0 in
+    for i = 0 to mask do
+      let child = intersect_node shift f children1.(i) children2.(i) in
+      if child <> Empty then
         begin
-          match
-            List.fold_left
-              (fun acc (k, v) ->
-                try
-                  let w = List.assoc k li2 in
-                  (k, f v w) :: acc
-                with Not_found -> acc
-              )
-              [] li1
-          with
-            | [] -> Empty
-            | [(k, v)] -> Leaf (h1, k, v)
-            | li -> HashCollision (h1, li)
+          incr nb_children;
+          children.(i) <- child
         end
-  | HashCollision (h, li), BitmapIndexedNode (bitmap, base) ->
-      let bit = 1 lsl (hash_fragment shift h) in
-      if bitmap land bit = 0 then Empty
-      else
-        let n = ctpop (bitmap land (pred bit)) in
-        let node = intersect_node (shift + shift_step) f t1 base.(n) in
-        if is_tip_node node then node
-        else BitmapIndexedNode (bit, [|node|])
-  | HashCollision (h, li), ArrayNode (nb_children, children) ->
-      let fragment = hash_fragment shift h in
-      if children.(fragment) = Empty then Empty
-      else
-        let child =
-          intersect_node (shift + shift_step) f t1 children.(fragment) in
-        if is_tip_node child then child
-        else BitmapIndexedNode (1 lsl fragment, [|child|])
-  | BitmapIndexedNode (bitmap1, base1), BitmapIndexedNode (bitmap2, base2) ->
-      let bitmap = bitmap1 land bitmap2 in
-      if bitmap = 0 then Empty
-      else begin
-        match
-          intersect_bitmap (shift + shift_step) f
-            (bitmap_to_indices bitmap1)
-            (bitmap_to_indices bitmap2)
-            0 0 base1 base2 []
-        with
-          | [] -> Empty
-          | [x] when is_tip_node x -> x
-          | base -> BitmapIndexedNode (bitmap, array_of_rev_list base)
-      end
-  | ArrayNode (num1, children1), ArrayNode (num2, children2) ->
-      intersect_array (shift + shift_step) f children1 children2
-  | BitmapIndexedNode (bitmap, base), ArrayNode (_nb_children, children) ->
-      intersect_bitmap_array
-        (shift + shift_step) f bitmap base children
-  | _, _ -> intersect_node shift (fun x y -> f y x) t2 t1
+    done;
+    reify_node (ArrayNode (!nb_children, children))
+
+and intersect_node :
+    'a 'b. int -> ('a -> 'b -> 'c) -> ('k, 'a) t -> ('k, 'b) t -> ('k, 'c) t =
+  fun shift f t1 t2 ->
+    match (t1, t2) with
+      | Empty, _ -> Empty
+      | Leaf (h, k, v), _ ->
+          begin
+            try Leaf (h, k, f v  (find k t2))
+            with Not_found -> Empty
+          end
+      | HashCollision (h1, li1), HashCollision (h2, li2)->
+          if h1 <> h2
+          then Empty
+          else
+            reify_node (
+              HashCollision (
+                h1,
+                List.fold_left
+                  (fun acc (k, v) ->
+                    try (k, f v (List.assoc k li2)) :: acc with Not_found -> acc)
+                  [] li1))
+      | HashCollision (h, li), BitmapIndexedNode (bitmap, base) ->
+          let bit = 1 lsl (hash_fragment shift h) in
+          if bitmap land bit = 0 then Empty
+          else
+            let n = ctpop (bitmap land (pred bit)) in
+            let node = intersect_node (shift + shift_step) f t1 base.(n) in
+            reify_node (BitmapIndexedNode (bit, [|node|]))
+      | HashCollision (h, li), ArrayNode (nb_children, children) ->
+          let fragment = hash_fragment shift h in
+          let child =
+            intersect_node (shift + shift_step) f t1 children.(fragment) in
+          reify_node (BitmapIndexedNode (1 lsl fragment, [|child|]))
+      | BitmapIndexedNode (bitmap1, base1), BitmapIndexedNode (bitmap2, base2) ->
+          let bitmap = bitmap1 land bitmap2 in
+          if bitmap = 0 then Empty
+          else
+            intersect_array (shift + shift_step) f
+              (bitmap_to_array bitmap1 base1)
+              (bitmap_to_array bitmap2 base2)
+      | BitmapIndexedNode (bitmap, base), ArrayNode (_, children) ->
+          intersect_array (shift + shift_step) f
+            (bitmap_to_array bitmap base) children
+      | ArrayNode (_, children1), ArrayNode (_, children2) ->
+          intersect_array (shift + shift_step) f children1 children2
+      | _, _ -> intersect_node shift (fun x y -> f y x) t2 t1
 
 let intersect f t1 t2 =
-  let t2 = copy t2 in
   intersect_node 0 f t1 t2
 
-let rec merge_array : 'a 'b.
-  int -> ('k -> 'a option -> 'b option -> 'c option) ->
-  ('k, 'a) t array -> ('k, 'b) t array -> ('k, 'c) t
-  = fun shift f children1 children2 ->
+let rec merge_array :
+    'a 'b.
+    int -> ('k -> 'a option -> 'b option -> 'c option) ->
+  ('k, 'a) t array -> ('k, 'b) t array -> ('k, 'c) t =
+  fun shift f children1 children2 ->
     let nb_children = ref 0
     and children = Array.make chunk Empty in
     for i = 0 to mask do
@@ -560,9 +524,9 @@ let rec merge_array : 'a 'b.
     reify_node (ArrayNode (!nb_children, children))
 
 and merge_node :
-  'a 'b. int ->
-  ('k -> 'a option -> 'b option -> 'c option) -> ('k, 'a) t -> ('k, 'b) t -> ('k, 'c) t
-  = fun shift f t1 t2 -> match (t1, t2) with
+    'a 'b. int ->
+  ('k -> 'a option -> 'b option -> 'c option) -> ('k, 'a) t -> ('k, 'b) t -> ('k, 'c) t =
+  fun shift f t1 t2 -> match (t1, t2) with
     | Empty, _ -> alter_all ~mute:true (fun k v -> f k None (Some v)) t2
     | Leaf (_h, k, v), _ ->
         let flag = ref false in
@@ -588,7 +552,7 @@ and merge_node :
         merge_array shift f
           (bitmap_to_array bitmap1 base1)
           (bitmap_to_array bitmap2 base2)
-    | BitmapIndexedNode (bitmap, base), ArrayNode (_nb_children, children) ->
+    | BitmapIndexedNode (bitmap, base), ArrayNode (_, children) ->
         merge_array shift f (bitmap_to_array bitmap base) children
     | ArrayNode (_, children1), ArrayNode (_, children2) ->
         merge_array shift f children1 children2

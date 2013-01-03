@@ -16,7 +16,7 @@ val modify_def : 'b -> 'a -> ('b -> 'b) -> ('a, 'b) t -> ('a, 'b) t
 val adjust : 'a -> ('b -> 'b) -> ('a, 'b) t -> ('a, 'b) t
 
 val iter : ('a -> 'b -> unit) -> ('a, 'b) t -> unit
-val map : ('b -> 'c) -> ('a, 'b) t -> ('a, 'b) t
+val map : ('b -> 'c) -> ('a, 'b) t -> ('a, 'c) t
 val mapi : ('a -> 'b -> 'c) -> ('a, 'b) t -> ('a, 'c) t
 val filterv : ('b -> bool) -> ('a, 'b) t -> ('a, 'b) t
 val filter : ('a -> 'b -> bool) -> ('a, 'b) t -> ('a, 'b) t
@@ -37,7 +37,7 @@ val partition : ('a -> 'b -> bool) -> ('a, 'b) t -> ('a, 'b) t * ('a, 'b) t
 val choose : ('a, 'b) t -> 'a * 'b
 val pop : ('a, 'b) t -> ('a * 'b) * ('a, 'b) t
 
-val intersect : ('a -> 'a -> 'a) -> ('b, 'a) t -> ('b, 'a) t -> ('b, 'a) t
+val intersect : ('b -> 'c -> 'd) -> ('a, 'b) t -> ('a, 'c) t -> ('a, 'd) t
 
 val merge :
   ('a -> 'b option -> 'c option -> 'd option) ->
