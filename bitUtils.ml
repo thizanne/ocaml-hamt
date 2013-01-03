@@ -38,3 +38,9 @@ let rec indices_to_bitmap =
   List.fold_left
     (fun x i -> x lor 1 lsl i) 0
 
+(*
+  Given a bitmap and an integer, returns the boolean corresponding to
+  the n-th bit (0 is the weakest) of the bitmap
+*)
+let nth_bit_set bitmap n =
+  (bitmap asr n) land 1 = 1
