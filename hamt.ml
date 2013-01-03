@@ -263,20 +263,34 @@ let alter key update hamt =
 let add k v hamt =
   alter k (fun _ -> Some v) hamt
 
+let add_mute k v hamt =
+  alter_mute k (fun _ -> Some v) hamt
+
+let add_carry k v hamt =
+  let previous_value = ref None in
+  let r = alter k (fun v' -> previous_value := v'; Some v) hamt in
+  r, !previous_value
+
 let remove k hamt =
   alter k (fun _ -> None) hamt
 
+let extract k hamt =
+  let value = ref (Obj.magic 0)  in
+  let r = alter k
+    (function None -> raise Not_found | Some v -> value := v; None) hamt in
+  !value, r
+
 let update k f hamt =
-  alter k (function | None -> None | Some v -> f v) hamt
+  alter k (function None -> None | Some v -> f v) hamt
 
 let modify k f hamt =
-  alter k (function | None -> raise Not_found | Some v -> Some (f v)) hamt
+  alter k (function None -> raise Not_found | Some v -> Some (f v)) hamt
 
 let modify_def v0 k f hamt =
-  alter k (function | None -> Some (f v0) | Some v -> Some (f v)) hamt
+  alter k (function None -> Some (f v0) | Some v -> Some (f v)) hamt
 
 let adjust k f hamt =
-  alter k (function | None -> None | Some v -> Some (f v)) hamt
+  alter k (function None -> None | Some v -> Some (f v)) hamt
 
 let rec alter_hc f = function
   | [] -> []
@@ -330,6 +344,9 @@ let map f hamt =
   alter_all (fun _k v -> Some (f v)) hamt
 
 let filter f hamt =
+  alter_all (fun k v -> if f k v then Some v else None) hamt
+
+let filterv f hamt =
   alter_all (fun _k v -> if f v then Some v else None) hamt
 
 let filter_map f hamt =
@@ -384,10 +401,14 @@ let rec foldi f hamt v0 =
 let fold f hamt v0 =
   foldi (fun _k v acc -> f v acc) hamt v0
 
-let to_assoc hamt =
+let bindings hamt =
   foldi (fun k v acc -> (k, v) :: acc) hamt []
 
-let bindings hamt = to_assoc hamt
+let keys hamt =
+  foldi (fun k _v acc -> k :: acc) hamt []
+
+let values hamt =
+  fold (fun v acc -> v :: acc) hamt []
 
 let for_all f hamt =
   foldi (fun k v acc -> f k v && acc) hamt true
@@ -395,7 +416,11 @@ let for_all f hamt =
 let exists f hamt =
   foldi (fun k v acc -> f k v || acc) hamt false
 
-let exists_f = exists
+let partition f hamt =
+  foldi
+    (fun k v (yes, no) ->
+      if f k v then (add k v yes, no) else (yes, add k v no))
+    hamt (Empty, Empty)
 
 let rec choose = function
   | Empty -> raise Not_found
@@ -407,54 +432,9 @@ let rec choose = function
         if children.(n) = Empty then loop (succ n) else children.(n)
       in choose (loop 0)
 
-
-module Import =
-
-struct
-
-  module type FOLDABLE = sig
-    type key
-    type 'v t
-    val fold : (key -> 'v -> 'a -> 'a) -> 'v t -> 'a -> 'a
-  end
-
-  (*
-   * TODO : use mutability when adapted
-   *)
-  module Make (M : FOLDABLE) =
-  struct
-    let add_import x hamt = M.fold add x (copy hamt)
-    let import x = add_import x Empty
-  end
-
-  module List =
-  struct
-    let add_import assoc hamt =
-      List.fold_left
-        (fun acc (k, v) ->
-          alter_mute k (fun _ -> Some v) acc)
-        (copy hamt) assoc
-
-    let import assoc = add_import assoc Empty
-  end
-
-  (*
-  (* Requires Batteries or something like this *)
-
-  module Map =
-  struct
-
-    let add_import x hamt =
-      BatMap.foldi (fun k v acc ->
-        alter_mute k (fun _ -> Some v) acc)
-        x (copy hamt)
-
-    let import x = add_import x Empty
-
-  end
-  *)
-
-end
+let pop hamt =
+  let (k, v) = choose hamt in
+  (k, v), remove k hamt
 
 let array_of_rev_list li =
   let a = Array.make (List.length li) (List.hd li) in
@@ -616,8 +596,53 @@ and merge_node :
 
 let merge f t1 t2 = merge_node 0 f t1 t2
 
-let union f t1 t2 = merge
+let union t1 t2 = merge
+  (fun k x y -> match (x, y) with
+    | _, None -> x
+    | _, _ -> y) t1 t2
+
+let union_f f t1 t2 = merge
   (fun k x y -> match (x, y) with
     | None, _ -> y
     | _, None -> x
     | Some v1, Some v2 -> Some (f v1 v2)) t1 t2
+
+module Import =
+
+struct
+
+  module type FOLDABLE = sig
+    type key
+    type 'v t
+    val fold : (key -> 'v -> 'a -> 'a) -> 'v t -> 'a -> 'a
+  end
+
+  module Make (M : FOLDABLE) =
+  struct
+    let add_from x hamt = M.fold add_mute x (copy hamt)
+    let from x = add_from x Empty
+  end
+
+  module List =
+  struct
+    let add_from assoc hamt =
+      List.fold_left
+        (fun acc (k, v) ->
+          add_mute k v acc)
+        (copy hamt) assoc
+
+    let from assoc = add_from assoc Empty
+  end
+
+end
+
+module ExceptionLess = struct
+  let extract k hamt = try let v, r = extract k hamt in Some v, r with Not_found -> None, hamt
+  let find k hamt = try Some (find k hamt) with Not_found -> None
+  let choose hamt = try Some (choose hamt) with Not_found -> None
+end
+
+module Infix = struct
+  let ( --> ) hamt k = find k hamt
+  let ( <-- ) hamt (k, v) = add k v hamt
+end
