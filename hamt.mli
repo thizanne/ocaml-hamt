@@ -1,83 +1,103 @@
-type ('a, 'b) t
-
-val empty : ('a, 'b) t
-val is_empty : ('a, 'b) t -> bool
-val singleton : 'a -> 'b -> ('a, 'b) t
-val cardinal : ('a, 'b) t -> int
-
-val alter : 'a -> ('b option -> 'b option) -> ('a, 'b) t -> ('a, 'b) t
-val add : 'a -> 'b -> ('a, 'b) t -> ('a, 'b) t
-val add_carry : 'a -> 'b -> ('a, 'b) t -> ('a, 'b) t * 'b option
-val remove : 'a -> ('a, 'b) t -> ('a, 'b) t
-val extract : 'a -> ('a, 'b) t -> 'b * ('a, 'b) t
-val update : 'a -> ('b -> 'b option) -> ('a, 'b) t -> ('a, 'b) t
-val modify : 'a -> ('b -> 'b) -> ('a, 'b) t -> ('a, 'b) t
-val modify_def : 'b -> 'a -> ('b -> 'b) -> ('a, 'b) t -> ('a, 'b) t
-val adjust : 'a -> ('b -> 'b) -> ('a, 'b) t -> ('a, 'b) t
-
-val iter : ('a -> 'b -> unit) -> ('a, 'b) t -> unit
-val map : ('b -> 'c) -> ('a, 'b) t -> ('a, 'c) t
-val mapi : ('a -> 'b -> 'c) -> ('a, 'b) t -> ('a, 'c) t
-val filterv : ('b -> bool) -> ('a, 'b) t -> ('a, 'b) t
-val filter : ('a -> 'b -> bool) -> ('a, 'b) t -> ('a, 'b) t
-val filteri : ('a -> 'b -> bool) -> ('a, 'b) t -> ('a, 'b) t
-val filter_map : ('a -> 'b -> 'c option) -> ('a, 'b) t -> ('a, 'c) t
-
-val find : 'a -> ('a, 'b) t -> 'b
-val mem : 'a -> ('a, 'b) t -> bool
-
-val fold : ('b -> 'c -> 'c) -> ('a, 'b) t -> 'c -> 'c
-val foldi : ('a -> 'b -> 'c -> 'c) -> ('a, 'b) t -> 'c -> 'c
-val keys : ('a, 'b) t -> 'a list
-val values : ('a, 'b) t -> 'b list
-val bindings : ('a, 'b) t -> ('a * 'b) list
-val for_all : ('a -> 'b -> bool) -> ('a, 'b) t -> bool
-val exists : ('a -> 'b -> bool) -> ('a, 'b) t -> bool
-val partition : ('a -> 'b -> bool) -> ('a, 'b) t -> ('a, 'b) t * ('a, 'b) t
-val choose : ('a, 'b) t -> 'a * 'b
-val pop : ('a, 'b) t -> ('a * 'b) * ('a, 'b) t
-
-val intersect : ('b -> 'c -> 'd) -> ('a, 'b) t -> ('a, 'c) t -> ('a, 'd) t
-
-val merge :
-  ('a -> 'b option -> 'c option -> 'd option) ->
-  ('a, 'b) t -> ('a, 'c) t -> ('a, 'd) t
-val union : ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
-val union_f : ('b -> 'b -> 'b) -> ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
-
-module Import :
-sig
-
-  module type FOLDABLE =
-  sig
-    type key
-    type 'a t
-    val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
-  end
-
-  module Make (M : FOLDABLE) :
-  sig
-    val add_from : 'a M.t -> (M.key, 'a) t -> (M.key, 'a) t
-    val from : 'a M.t -> (M.key, 'a) t
-  end
-
-  module List :
-  sig
-    val add_from : ('a * 'b) list -> ('a, 'b) t -> ('a, 'b) t
-    val from : ('a * 'b) list -> ('a, 'b) t
-  end
-
+module type CONFIG = sig
+  val shift_step : int
+  val bmnode_max : int
+  val arrnode_min : int
 end
 
-module ExceptionLess :
-sig
-  val extract : 'a -> ('a, 'b) t -> 'b option * ('a, 'b) t
-  val find : 'a -> ('a, 'b) t -> 'b option
-  val choose : ('a, 'b) t -> ('a * 'b) option
+module StdConfig : CONFIG
+module StdConfig32 : CONFIG
+
+module type HASHABLE = sig
+  type t
+  val hash : t -> int
 end
 
-module Infix :
-sig
-  val ( --> ) : ('a, 'b) t -> 'a -> 'b
-  val ( <-- ) : ('a, 'b) t -> 'a * 'b -> ('a, 'b) t
+module type S = sig
+
+  type key
+  type 'a t
+
+  val empty : 'a t
+  val is_empty : 'a t -> bool
+  val singleton : key -> 'a -> 'a t
+  val cardinal : 'a t -> int
+
+  val alter : key -> ('a option -> 'a option) -> 'a t -> 'a t
+  val add : key -> 'a -> 'a t -> 'a t
+  val add_carry : key -> 'a -> 'a t -> 'a t * 'a option
+  val remove : key -> 'a t -> 'a t
+  val extract : key -> 'a t -> 'a * 'a t
+  val update : key -> ('a -> 'a option) -> 'a t -> 'a t
+  val modify : key -> ('a -> 'a) -> 'a t -> 'a t
+  val modify_def : 'a -> key -> ('a -> 'a) -> 'a t -> 'a t
+  val adjust : key -> ('a -> 'a) -> 'a t -> 'a t
+
+  val iter : (key -> 'a -> unit) -> 'a t -> unit
+  val map : ('a -> 'b) -> 'a t -> 'b t
+  val mapi : (key -> 'a -> 'b) -> 'a t -> 'b t
+  val filterv : ('a -> bool) -> 'a t -> 'a t
+  val filter : (key -> 'a -> bool) -> 'a t -> 'a t
+  val filteri : (key -> 'a -> bool) -> 'a t -> 'a t
+  val filter_map : (key -> 'a -> 'b option) -> 'a t -> 'b t
+
+  val find : key -> 'a t -> 'a
+  val mem : key -> 'a t -> bool
+
+  val fold : ('a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+  val foldi : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+  val keys : 'a t -> key list
+  val values : 'a t -> 'a list
+  val bindings : 'a t -> (key * 'a) list
+  val for_all : (key -> 'a -> bool) -> 'a t -> bool
+  val exists : (key -> 'a -> bool) -> 'a t -> bool
+  val partition : (key -> 'a -> bool) -> 'a t -> 'a t * 'a t
+  val choose : 'a t -> key * 'a
+  val pop : 'a t -> (key * 'a) * 'a t
+
+  val intersect : ('a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
+
+  val merge :
+    (key -> 'a option -> 'b option -> 'c option) ->
+    'a t -> 'b t -> 'c t
+  val union : 'a t -> 'a t -> 'a t
+  val union_f : ('a -> 'a -> 'a) -> 'a t -> 'a t -> 'a t
+
+  module Import :
+  sig
+
+    module type FOLDABLE =
+    sig
+      type key
+      type 'a t
+      val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+    end
+
+    module Make (M : FOLDABLE with type key = key) :
+    sig
+      val add_from : 'a M.t -> 'a t -> 'a t
+      val from : 'a M.t -> 'a t
+    end
+
+    module AssocList :
+    sig
+      val add_from : (key * 'a) list -> 'a t -> 'a t
+      val from : (key * 'a) list -> 'a t
+    end
+
+  end
+
+  module ExceptionLess :
+  sig
+    val extract : key -> 'a t -> 'a option * 'a t
+    val find : key -> 'a t -> 'a option
+    val choose : 'a t -> (key * 'a) option
+  end
+
+  module Infix :
+  sig
+    val ( --> ) : 'a t -> key -> 'a
+    val ( <-- ) : 'a t -> key * 'a -> 'a t
+  end
 end
+
+module Make (Config : CONFIG) (Key : HASHABLE) : S with type key = Key.t
