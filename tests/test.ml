@@ -1,5 +1,5 @@
 (*
-  This while file is ugly
+  This whole file is ugly
 *)
 
 

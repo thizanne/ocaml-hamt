@@ -1,6 +1,6 @@
 {
 (*
-  Usage: ./compte.native file.txt number_of_more_present_words_to_display
+  Usage: ./compte.native file1.txt file2.txt number_of_more_present_words_to_display
 *)
 
 (*
@@ -32,17 +32,21 @@ let rec string_of_list = function
   | [] -> ""
   | (k, v) :: tl -> Printf.sprintf "%s [%d]\n%s" k v (string_of_list tl)
 
-let table = word M.empty (Lexing.from_channel (open_in Sys.argv.(1)));;
+let table1 = word M.empty (Lexing.from_channel (open_in Sys.argv.(1)))
+let table2 = word M.empty (Lexing.from_channel (open_in Sys.argv.(2)))
+
 let () =
-  let n_max = int_of_string (Sys.argv.(2)) in
-  Printf.printf "
+  let n_max = int_of_string (Sys.argv.(3)) in
+  let f table =
+    Printf.printf "
 Nombre total de mots : %d
 Nombre de mots uniques : %d
 %d mots les plus présents : \n%s"
-    (M.fold ( + ) table 0)
-    (M.cardinal table)
-    n_max
-    (string_of_list
-       (M.foldi inser_if table (BatList.make n_max ("", 0))))
+      (M.fold ( + ) table 0)
+      (M.cardinal table)
+      n_max
+      (string_of_list
+         (M.foldi inser_if table (BatList.make n_max ("", 0))))
+  in f table1; f table2; f (Hamt.intersect ( + ) table1 table2)
 }
         
