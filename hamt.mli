@@ -1,9 +1,8 @@
-(**
-   Persistent association tables over hashable types.
+(** Persistent association tables over hashable types.
 
-   The module implements Hash Array Mapped Trie.
+    The module implements Hash Array Mapped Trie.
 
-   @author Thibault Suzanne
+    @author Thibault Suzanne
 *)
 
 module type CONFIG = sig
@@ -29,7 +28,7 @@ end
 module type S = sig
 
   type key
-  (** The type of the {v Hamt} keys *)
+  (** The type of the Hamt keys *)
 
   type +'a t
   (** The type of tables from type [key] to type ['a] *)
@@ -173,7 +172,6 @@ module type S = sig
       keys [k] found in [t1] and [t2], and where [v = f v1 v2] if [k]
       is bound to [v1] in [t1] and to [v2] in [t2]. *)
 
-
   val merge :
     (key -> 'a option -> 'b option -> 'c option) ->
     'a t -> 'b t -> 'c t
@@ -198,17 +196,17 @@ module type S = sig
 
   (** The [Import] module is used to transform a full big set of data
       into a Hamt. It uses internal mechanisms relying on the
-      implementation of the {v Hamt} structure to provide faster
+      implementation of the Hamt structure to provide faster
       imports than adding the bindings of the imported structure
       element by element. However, if you want to import a data
-      structure into a {v Hamt} which is already a lot bigger, you
+      structure into a Hamt which is already a lot bigger, you
       should consider adding the elements with the usual fonctions of
       {!Make}. At which size difference the faster method is switched
       is not yet determined and must be analysed in your own case. *)
 
   module Import : sig
 
-    (** Input signature of the module {!Make}, representing datas to be imported in {v Hamt} *)
+    (** Input signature of the module {!Make}, representing datas to be imported in Hamt *)
     module type FOLDABLE =
     sig
 
@@ -221,7 +219,7 @@ module type S = sig
       val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
       (** A fold function on your data structure. Its role is to apply
           a function to every binding of your structure, building the
-          {v Hamt} by accumulation on the third parameter of this
+          Hamt by accumulation on the third parameter of this
           function. *)
 
     end
@@ -229,33 +227,33 @@ module type S = sig
     module Make (M : FOLDABLE with type key = key) :
     sig
       val add_from : 'a M.t -> 'a t -> 'a t
-      (** [add_from s t] adds every binding of [s] to the {v Hamt} [t]. *)
+      (** [add_from s t] adds every binding of [s] to the Hamt [t]. *)
 
       val from : 'a M.t -> 'a t
-      (** [from s] buils a {v Hamt} containing every binding of [s].*)
+      (** [from s] buils a Hamt containing every binding of [s].*)
     end
 
     module AssocList :
     sig
       val add_from : (key * 'a) list -> 'a t -> 'a t
       (** [add_from li t] adds every binding of the association list
-          [li] to the {v Hamt} t *)
+          [li] to the Hamt t *)
 
       val from : (key * 'a) list -> 'a t
-      (** [from li] builds a {v Hamt} containing every binding of
+      (** [from li] builds a Hamt containing every binding of
           the association list [li] *)
     end
 
   end
 
-  (** Operations on {v Hamt} without exceptions *)
+  (** Operations on Hamt without exceptions *)
   module ExceptionLess :
   sig
 
     (** These functions do not raise [Not_found] if they do not find
         a relevant binding. In this case, they use the [option] type
         to return [None] as this binding, and if their results
-        contains a {v Hamt}, it is left unmodified *)
+        contains a Hamt, it is left unmodified *)
 
     val extract : key -> 'a t -> 'a option * 'a t
     val update : key -> ('a -> 'a option) -> 'a t -> 'a t
@@ -264,7 +262,7 @@ module type S = sig
     val choose : 'a t -> (key * 'a) option
   end
 
-  (** Infix operations on {v Hamt} *)
+  (** Infix operations on Hamt *)
   module Infix :
   sig
     val ( --> ) : 'a t -> key -> 'a
@@ -279,4 +277,5 @@ module type S = sig
 end
 
 module Make (Config : CONFIG) (Key : HASHABLE) : S with type key = Key.t
-(** Functor building an implementation of the {v Hamt} structure, given a hashable type *)
+(** Functor building an implementation of the Hamt structure,
+    given a hashable type *)
