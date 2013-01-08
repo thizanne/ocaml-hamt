@@ -393,16 +393,13 @@ struct
     !value, r
 
   let update k f hamt =
-    alter k (function None -> None | Some v -> f v) hamt
+    alter k (function None -> raise Not_found | Some v -> f v) hamt
 
   let modify k f hamt =
     alter k (function None -> raise Not_found | Some v -> Some (f v)) hamt
 
   let modify_def v0 k f hamt =
     alter k (function None -> Some (f v0) | Some v -> Some (f v)) hamt
-
-  let adjust k f hamt =
-    alter k (function None -> None | Some v -> Some (f v)) hamt
 
   let rec alter_hc f = function
     | [] -> []
@@ -467,9 +464,6 @@ struct
   let mapi f hamt =
     alter_all (fun k v -> Some (f k v)) hamt
 
-  let filteri f hamt =
-    alter_all (fun k v -> if f k v then Some v else None) hamt
-
   let rec iter f = function
     | Empty -> ()
     | Leaf (_, k, v) -> f k v
@@ -499,37 +493,37 @@ struct
     with
       | Not_found -> false
 
-  let rec foldi f hamt v0 =
+  let rec fold f hamt v0 =
     match hamt with
       | Empty -> v0
       | Leaf (_, k, v) -> f k v v0
       | HashCollision (_, pairs) ->
           List.fold_right (fun (k, v) acc -> f k v acc) pairs v0
       | BitmapIndexedNode (_, base) ->
-          Array.fold_right (foldi f) base v0
+          Array.fold_right (fold f) base v0
       | ArrayNode (_, children) ->
-          Array.fold_right (foldi f) children v0
+          Array.fold_right (fold f) children v0
 
-  let fold f hamt v0 =
-    foldi (fun _k v acc -> f v acc) hamt v0
+  let foldv f hamt v0 =
+    fold (fun _k v acc -> f v acc) hamt v0
 
   let bindings hamt =
-    foldi (fun k v acc -> (k, v) :: acc) hamt []
+    fold (fun k v acc -> (k, v) :: acc) hamt []
 
   let keys hamt =
-    foldi (fun k _v acc -> k :: acc) hamt []
+    fold (fun k _v acc -> k :: acc) hamt []
 
   let values hamt =
     fold (fun v acc -> v :: acc) hamt []
 
   let for_all f hamt =
-    foldi (fun k v acc -> f k v && acc) hamt true
+    fold (fun k v acc -> f k v && acc) hamt true
 
   let exists f hamt =
-    foldi (fun k v acc -> f k v || acc) hamt false
+    fold (fun k v acc -> f k v || acc) hamt false
 
   let partition f hamt =
-    foldi
+    fold
       (fun k v (yes, no) ->
         if f k v then (add k v yes, no) else (yes, add k v no))
       hamt (Empty, Empty)
@@ -557,7 +551,7 @@ struct
     a
 
   let rec intersect_array :
-      'a 'b. int -> ('a -> 'b -> 'c) -> 'a t array -> 'b t array -> 'c t =
+      'a 'b. int -> (key -> 'a -> 'b -> 'c) -> 'a t array -> 'b t array -> 'c t =
     fun shift f children1 children2 ->
       let children = Array.make chunk Empty
       and nb_children = ref 0 in
@@ -572,13 +566,13 @@ struct
       reify_node (ArrayNode (!nb_children, children))
 
   and intersect_node :
-      'a 'b. int -> ('a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t =
+      'a 'b. int -> (key -> 'a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t =
     fun shift f t1 t2 ->
       match (t1, t2) with
         | Empty, _ -> Empty
         | Leaf (h, k, v), _ ->
             begin
-              try Leaf (h, k, f v  (find k t2))
+              try Leaf (h, k, f k v (find k t2))
               with Not_found -> Empty
             end
         | HashCollision (h1, li1), HashCollision (h2, li2)->
@@ -590,7 +584,8 @@ struct
                   h1,
                   List.fold_left
                     (fun acc (k, v) ->
-                      try (k, f v (List.assoc k li2)) :: acc with Not_found -> acc)
+                      try (k, f k v (List.assoc k li2)) :: acc
+                      with Not_found -> acc)
                     [] li1))
         | HashCollision (h, li), BitmapIndexedNode (bitmap, base) ->
             let bit = 1 lsl (hash_fragment shift h) in
@@ -618,8 +613,11 @@ struct
             intersect_array (shift + shift_step) f children1 children2
         | _, _ -> intersect_node shift (fun x y -> f y x) t2 t1
 
-  let intersect f t1 t2 =
+  let intersecti f t1 t2 =
     intersect_node 0 f t1 t2
+
+  let intersect f t1 t2 =
+    intersecti (fun k v -> f v) t1 t2
 
   let rec merge_array :
       'a 'b.
@@ -681,7 +679,7 @@ struct
     (fun k x y -> match (x, y) with
       | None, _ -> y
       | _, None -> x
-      | Some v1, Some v2 -> Some (f v1 v2)) t1 t2
+      | Some v1, Some v2 -> Some (f k v1 v2)) t1 t2
 
   module Import =
 
@@ -716,6 +714,7 @@ struct
     let extract k hamt = try let v, r = extract k hamt in Some v, r with Not_found -> None, hamt
     let find k hamt = try Some (find k hamt) with Not_found -> None
     let choose hamt = try Some (choose hamt) with Not_found -> None
+    let modify k f hamt = try modify k f hamt with Not_found -> hamt
   end
 
   module Infix = struct
