@@ -639,17 +639,17 @@ struct
       'a 'b. int ->
     (key -> 'a option -> 'b option -> 'c option) -> 'a t -> 'b t -> 'c t =
     fun shift f t1 t2 -> match (t1, t2) with
-      | Empty, _ -> alter_all ~mute:true (fun k v -> f k None (Some v)) t2
-      | Leaf (_h, k, v), _ ->
+      | Empty, _ -> alter_all (fun k v -> f k None (Some v)) t2
+      | Leaf (h, k, v), _ ->
           let flag = ref false in
-          let t2 = alter_all ~mute:true
+          let t2 = alter_all
             (fun k' v' ->
               if k' = k then (flag := true; f k (Some v) (Some v'))
               else f k' None (Some v')) t2;
-          in if !flag then t2 else alter_mute ~shift k (fun _ -> f k (Some v) None) t2
+          in if !flag then t2 else alter_node shift h k (fun _ -> f k (Some v) None) t2
       | HashCollision (h, li), _ ->
           let absents = ref li in
-          let t2 = alter_all ~mute:true
+          let t2 = alter_all
             (fun k' v' ->
               try
                 let v = List.assoc k' li in
@@ -657,7 +657,7 @@ struct
                 f k' (Some v) (Some v')
               with Not_found -> f k' None (Some v')) t2 in
           List.fold_left
-            (fun acc (k, v) -> alter_mute ~shift k
+            (fun acc (k, v) -> alter_node shift (hash k) k
               (fun _ -> f k (Some v) None) acc)
             t2 !absents
       | BitmapIndexedNode (bitmap1, base1), BitmapIndexedNode (bitmap2, base2) ->
