@@ -7,43 +7,77 @@
 
 module type CONFIG = sig
   val shift_step : int
+  (** The number of bits taken from the hashed key at every step of an
+      elementary function. Note that [2 ^ (2 ^ shift_step)] {b must}
+      be a valid OCaml [int] on the considered architecture (the
+      bigger the better). *)
+
   val bmnode_max : int
+  (** Arbitrary. It is used to balance time and space
+      consumption. A good value seems to be [2 ^ shift_step - 1]. *)
+
   val arrnode_min : int
+  (** Arbitrary. Must be lesser than [bmnode_max]. A good value seems
+      to be [bmnode_max / 2]. *)
+
 end
-(** Input signature of the size configuration of the structure *)
+(** Input signature of the size configuration of the structure. *)
 
 module StdConfig : CONFIG
-(** Standard configuration for 64-bits architectures *)
+(** Standard configuration for 64-bits architectures. Its parameters
+    are :
+
+    {[
+    let shift_step = 5
+    let bmnode_max = 16
+    let arrnode_min = 8
+    ]}
+*)
 
 module StdConfig32 : CONFIG
-(** Standard configuration for 32-bits architectures *)
+(** Standard configuration for 32-bits architectures. Its parameters
+    are :
+
+    {[
+    let shift_step = 4
+    let bmnode_max = 8
+    let arrnode_min = 4
+    ]}
+*)
 
 module type HASHABLE = sig
-  type t
-  val hash : t -> int
-end
-(** Input signature for the hashable keys module *)
+  (** Input signature for the hashable keys module. *)
 
-(** Output signature of the {!Make} module *)
+  type t
+  (** The type of hashable elements, to be used as keys. *)
+
+  val hash : t -> int
+  (** A hash function on [t] values. *)
+
+end
+
 module type S = sig
+  (** Output signature of the {!Make} module. *)
 
   type key
-  (** The type of the Hamt keys *)
+  (** The type of the Hamt keys. *)
 
   type +'a t
-  (** The type of tables from type [key] to type ['a] *)
+  (** The type of tables from type [key] to type ['a]. *)
 
   val empty : 'a t
-  (** The empty table *)
+  (** The empty table. *)
 
   val is_empty : 'a t -> bool
-  (** Test whether a table is empty or not *)
+  (** Tests whether a table is empty or not. *)
 
   val singleton : key -> 'a -> 'a t
-  (** Creates a new table with a single binding *)
+  (** Creates a new table with a single binding. *)
 
   val cardinal : 'a t -> int
-  (** Returns the number of bindings of a table *)
+  (** Returns the number of bindings of a table. *)
+
+  (** {3 Modify bindings } *)
 
   val alter : key -> ('a option -> 'a option) -> 'a t -> 'a t
   (** [alter k f t] adds, modifies or deletes the binding from the key
@@ -61,7 +95,7 @@ module type S = sig
       and optionnally the value previously bound to [k]. *)
 
   val remove : key -> 'a t -> 'a t
-  (** Removes a binding from a table, returning the new table *)
+  (** Removes a binding from a table, returning the new table. *)
 
   (** {!extract}, {!update} and {!modify} raise
       [Not_found] if the corresponding binding is not present in their
@@ -85,8 +119,39 @@ module type S = sig
       no value is bound from [k], the default one [v0] is used by
       [f]. *)
 
+  (** {3 Getting elements } *)
+
+  val find : key -> 'a t -> 'a
+  (** [find k t] returns the value bound from the key [k] in [t]. If
+      there is no such binding, [Not_found] is raised. *)
+
+  val mem : key -> 'a t -> bool
+  (** Checks for the presence of a binding from a key in a table. *)
+
+  val choose : 'a t -> key * 'a
+  (** Returns a binding from a table, which one is unspecified. If the
+      table is [Empty], raises [Not_found]. *)
+
+  val pop : 'a t -> (key * 'a) * 'a t
+  (** Removes a binding from a table, returning a pair constituted
+      of this binding and the table without it. If the table is [Empty],
+      raises [Not_found]. *)
+
+  (** {3 Iterators } *)
+
+  val keys : 'a t -> key list
+  (** Returns the list of the keys of a table (order unspecified). *)
+
+  val values : 'a t -> 'a list
+  (** Returns the list of the values of a table (order
+      unspecified). *)
+
+  val bindings : 'a t -> (key * 'a) list
+  (** Returns the list of the bindings [(key, value)] of a table
+      (order unspecified). *)
+
   val iter : (key -> 'a -> unit) -> 'a t -> unit
-  (** Iters the application of a function over the bindings of a table *)
+  (** Iterates the application of a function over the bindings of a table. *)
 
   val map : ('a -> 'b) -> 'a t -> 'b t
   (** [map f t] returns the table with the same keys as [t], where all
@@ -98,25 +163,18 @@ module type S = sig
       [f k v]. *)
 
   val filterv : ('a -> bool) -> 'a t -> 'a t
-  (** [filteri f t] returns a table whose bindings are the bindings of
-      [t] to a value [v] where [f v = true] *)
+  (** [filterv f t] returns a table whose bindings are the bindings of
+      [t] to a value [v] where [f v = true]. *)
 
   val filter : (key -> 'a -> bool) -> 'a t -> 'a t
   (** [filter f t] returns a table whose bindings are the bindings of
-      t from a key [k] to a value [v] where [f k v = true] *)
+      t from a key [k] to a value [v] where [f k v = true]. *)
 
   val filter_map : (key -> 'a -> 'b option) -> 'a t -> 'b t
   (** Combines the features of [filter] and [map]. [filter_map f t]
       returns a table where there is a binding from a key [k] to
       a value [v] if and only if there is a binding from [k] to
       a value [w] in [t] where [f k w = Some v]. *)
-
-  val find : key -> 'a t -> 'a
-  (** [find k t] returns the value bound from the key [k] in [t]. If
-      there is no such binding, [Not_found] is raised. *)
-
-  val mem : key -> 'a t -> bool
-  (** Checks for the presence of a binding from a key in a table. *)
 
   val foldv : ('a -> 'b -> 'b) -> 'a t -> 'b -> 'b
   (** [fold f t x] computes [(f vN ... (f v1 (f v0 x)))] where [v0,
@@ -129,16 +187,7 @@ module type S = sig
       vN] the values associated to these keys. The order in which the
       bindings are provided to [f] is unspecified. *)
 
-  val keys : 'a t -> key list
-  (** Returns the list of the keys of a table (order unspecified). *)
-
-  val values : 'a t -> 'a list
-  (** Returns the list of the values of a table (order
-      unspecified). *)
-
-  val bindings : 'a t -> (key * 'a) list
-  (** Returns the list of the bindings [(key, value)] of a table
-      (order unspecified). *)
+  (** {5 Scanning } *)
 
   val for_all : (key -> 'a -> bool) -> 'a t -> bool
   (** [for_all f t] returns [true] if [f k v] is [true] for all binding
@@ -153,14 +202,7 @@ module type S = sig
       of the bindings of [t] satisfying the predicate [f], and [t2] of
       the bindings which do not. *)
 
-  val choose : 'a t -> key * 'a
-  (** Returns a binding from a table, which one is unspecified. If the
-      table is [Empty], raises [Not_found]. *)
-
-  val pop : 'a t -> (key * 'a) * 'a t
-  (** Removes a binding from a table, returning a pair constituted
-      of this binding and the table without it. If the table is [Empty],
-      raises [Not_found]. *)
+  (** {3 Merging } *)
 
   val intersecti : (key -> 'a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
   (** [intersecti f t1 t2] returns a table with bindings only from
@@ -169,8 +211,8 @@ module type S = sig
 
   val intersect : ('a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
   (** [intersecti f t1 t2] returns a table with bindings only from
-      keys [k] found in [t1] and [t2], and where [v = f v1 v2] if [k]
-      is bound to [v1] in [t1] and to [v2] in [t2]. *)
+      keys [k] found in [t1] and [t2], and to values [v = f v1 v2] if
+      [k] is bound to [v1] in [t1] and to [v2] in [t2]. *)
 
   val merge :
     (key -> 'a option -> 'b option -> 'c option) ->
@@ -192,7 +234,7 @@ module type S = sig
       bound to [v1] in [t1] and [v2] in [t2], the value in the result
       is [f k v1 v2]. *)
 
-  (** {4 Importing values from another structure} *)
+  (** {2 Importing values from another structure} *)
 
   (** The [Import] module is used to transform a full big set of data
       into a Hamt. It uses internal mechanisms relying on the
@@ -206,15 +248,15 @@ module type S = sig
 
   module Import : sig
 
-    (** Input signature of the module {!Make}, representing datas to be imported in Hamt *)
+    (** Input signature of the module {!Make}, representing datas to be imported in Hamt. *)
     module type FOLDABLE =
     sig
 
       type key
-      (** The type of your datas' keys *)
+      (** The type of your datas' keys. *)
 
       type +'a t
-      (** The type of your data structure with ['a]-typed values *)
+      (** The type of your data structure with ['a]-typed values. *)
 
       val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
       (** A fold function on your data structure. Its role is to apply
@@ -237,23 +279,26 @@ module type S = sig
     sig
       val add_from : (key * 'a) list -> 'a t -> 'a t
       (** [add_from li t] adds every binding of the association list
-          [li] to the Hamt t *)
+          [li] to the Hamt t. *)
 
       val from : (key * 'a) list -> 'a t
       (** [from li] builds a Hamt containing every binding of
-          the association list [li] *)
+          the association list [li]. *)
     end
 
   end
 
-  (** Operations on Hamt without exceptions *)
+
+  (** {2 Alternative operations } *)
+
+  (** Operations without exceptions. *)
   module ExceptionLess :
   sig
 
     (** These functions do not raise [Not_found] if they do not find
         a relevant binding. In this case, they use the [option] type
         to return [None] as this binding, and if their results
-        contains a Hamt, it is left unmodified *)
+        contains a Hamt, it is left unmodified. *)
 
     val extract : key -> 'a t -> 'a option * 'a t
     val update : key -> ('a -> 'a option) -> 'a t -> 'a t
@@ -262,7 +307,7 @@ module type S = sig
     val choose : 'a t -> (key * 'a) option
   end
 
-  (** Infix operations on Hamt *)
+  (** Infix operations. *)
   module Infix :
   sig
     val ( --> ) : 'a t -> key -> 'a
@@ -271,11 +316,11 @@ module type S = sig
 
     val ( <-- ) : 'a t -> key * 'a -> 'a t
   (** [t <-- (k, v)] adds to [t] a binding from [k] to [v] and
-      returns the result. Strictly equivalent to [add k v Hamt] *)
+      returns the result. Strictly equivalent to [add k v Hamt]. *)
 
   end
 end
 
 module Make (Config : CONFIG) (Key : HASHABLE) : S with type key = Key.t
 (** Functor building an implementation of the Hamt structure,
-    given a hashable type *)
+    given a hashable type. *)
