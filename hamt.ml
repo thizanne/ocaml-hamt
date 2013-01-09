@@ -29,7 +29,6 @@ module type HASHABLE = sig
 end
 
 module type S = sig
-
   type key
   type 'a t
 
@@ -46,41 +45,37 @@ module type S = sig
   val update : key -> ('a -> 'a option) -> 'a t -> 'a t
   val modify : key -> ('a -> 'a) -> 'a t -> 'a t
   val modify_def : 'a -> key -> ('a -> 'a) -> 'a t -> 'a t
-  val adjust : key -> ('a -> 'a) -> 'a t -> 'a t
 
+  val find : key -> 'a t -> 'a
+  val mem : key -> 'a t -> bool
+  val choose : 'a t -> key * 'a
+  val pop : 'a t -> (key * 'a) * 'a t
+
+  val keys : 'a t -> key list
+  val values : 'a t -> 'a list
+  val bindings : 'a t -> (key * 'a) list
   val iter : (key -> 'a -> unit) -> 'a t -> unit
   val map : ('a -> 'b) -> 'a t -> 'b t
   val mapi : (key -> 'a -> 'b) -> 'a t -> 'b t
   val filterv : ('a -> bool) -> 'a t -> 'a t
   val filter : (key -> 'a -> bool) -> 'a t -> 'a t
-  val filteri : (key -> 'a -> bool) -> 'a t -> 'a t
   val filter_map : (key -> 'a -> 'b option) -> 'a t -> 'b t
+  val foldv : ('a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+  val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
 
-  val find : key -> 'a t -> 'a
-  val mem : key -> 'a t -> bool
-
-  val fold : ('a -> 'b -> 'b) -> 'a t -> 'b -> 'b
-  val foldi : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
-  val keys : 'a t -> key list
-  val values : 'a t -> 'a list
-  val bindings : 'a t -> (key * 'a) list
   val for_all : (key -> 'a -> bool) -> 'a t -> bool
   val exists : (key -> 'a -> bool) -> 'a t -> bool
   val partition : (key -> 'a -> bool) -> 'a t -> 'a t * 'a t
-  val choose : 'a t -> key * 'a
-  val pop : 'a t -> (key * 'a) * 'a t
 
+  val intersecti : (key -> 'a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
   val intersect : ('a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
-
   val merge :
     (key -> 'a option -> 'b option -> 'c option) ->
     'a t -> 'b t -> 'c t
   val union : 'a t -> 'a t -> 'a t
-  val union_f : ('a -> 'a -> 'a) -> 'a t -> 'a t -> 'a t
+  val union_f : (key -> 'a -> 'a -> 'a) -> 'a t -> 'a t -> 'a t
 
-  module Import :
-  sig
-
+  module Import : sig
     module type FOLDABLE =
     sig
       type key
@@ -99,12 +94,13 @@ module type S = sig
       val add_from : (key * 'a) list -> 'a t -> 'a t
       val from : (key * 'a) list -> 'a t
     end
-
   end
 
   module ExceptionLess :
   sig
     val extract : key -> 'a t -> 'a option * 'a t
+    val update : key -> ('a -> 'a option) -> 'a t -> 'a t
+    val modify : key -> ('a -> 'a) -> 'a t -> 'a t
     val find : key -> 'a t -> 'a option
     val choose : 'a t -> (key * 'a) option
   end
@@ -514,7 +510,7 @@ struct
     fold (fun k _v acc -> k :: acc) hamt []
 
   let values hamt =
-    fold (fun v acc -> v :: acc) hamt []
+    fold (fun _k v acc -> v :: acc) hamt []
 
   let for_all f hamt =
     fold (fun k v acc -> f k v && acc) hamt true
@@ -611,7 +607,7 @@ struct
               (bitmap_to_array bitmap base) children
         | ArrayNode (_, children1), ArrayNode (_, children2) ->
             intersect_array (shift + shift_step) f children1 children2
-        | _, _ -> intersect_node shift (fun x y -> f y x) t2 t1
+        | _, _ -> intersect_node shift (fun k x y -> f k y x) t2 t1
 
   let intersecti f t1 t2 =
     intersect_node 0 f t1 t2
@@ -712,9 +708,10 @@ struct
 
   module ExceptionLess = struct
     let extract k hamt = try let v, r = extract k hamt in Some v, r with Not_found -> None, hamt
+    let update k f hamt = try update k f hamt with Not_found -> hamt
+    let modify k f hamt = try modify k f hamt with Not_found -> hamt
     let find k hamt = try Some (find k hamt) with Not_found -> None
     let choose hamt = try Some (choose hamt) with Not_found -> None
-    let modify k f hamt = try modify k f hamt with Not_found -> hamt
   end
 
   module Infix = struct

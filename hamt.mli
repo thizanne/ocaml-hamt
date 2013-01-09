@@ -62,7 +62,7 @@ module type S = sig
   type key
   (** The type of the Hamt keys. *)
 
-  type +'a t
+  type 'a t
   (** The type of tables from type [key] to type ['a]. *)
 
   val empty : 'a t
@@ -255,7 +255,7 @@ module type S = sig
       type key
       (** The type of your datas' keys. *)
 
-      type +'a t
+      type 'a t
       (** The type of your data structure with ['a]-typed values. *)
 
       val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
