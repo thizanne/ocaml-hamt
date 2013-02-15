@@ -362,9 +362,6 @@ struct
     | ArrayNode (nb_children, children) ->
         ArrayNode (nb_children, Array.map copy children)
 
-  let alter_mute ?(shift=0) key update hamt =
-    alter_node ~mute:true shift (hash key) key update hamt
-
   let alter key update hamt =
     alter_node 0 (hash key) key update hamt
 
@@ -372,7 +369,7 @@ struct
     alter k (fun _ -> Some v) hamt
 
   let add_mute k v hamt =
-    alter_mute k (fun _ -> Some v) hamt
+    alter_node ~mute:true 0 (hash k) k (fun _ -> Some v) hamt
 
   let add_carry k v hamt =
     let previous_value = ref None in
