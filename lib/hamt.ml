@@ -149,6 +149,8 @@ struct
     | ArrayNode (_, children) ->
       Array.fold_left (fun acc child -> acc + cardinal child) 0 children
 
+  let length = cardinal
+
   let is_tip_node = function
     | Empty | Leaf (_, _, _) | HashCollision (_, _) -> true
     | _ -> false
