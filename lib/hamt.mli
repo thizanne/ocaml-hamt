@@ -124,8 +124,8 @@ module type S = sig
 
   (** {3 Getting elements } *)
 
-  val find : key -> 'a t -> 'a
-  (** [find k t] returns the value bound from the key [k] in [t]. If
+  val find_exn : key -> 'a t -> 'a
+  (** [find_exn k t] returns the value bound from the key [k] in [t]. If
       there is no such binding, [Not_found] is raised. *)
 
   val mem : key -> 'a t -> bool
@@ -315,7 +315,7 @@ module type S = sig
   sig
     val ( --> ) : 'a t -> key -> 'a
     (** [t --> k] returns the current binding of [k] in [t], or
-        raises [Not_found]. Strictly equivalent to [find k t]. *)
+        raises [Not_found]. Strictly equivalent to [find_exn k t]. *)
 
     val ( <-- ) : 'a t -> key * 'a -> 'a t
     (** [t <-- (k, v)] adds to [t] a binding from [k] to [v] and

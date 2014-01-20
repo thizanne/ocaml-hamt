@@ -6,7 +6,7 @@ module type Assoc = sig
   type key = int
   type 'a t
   val empty : 'a t
-  val find : key -> 'a t -> 'a
+  val find_exn : key -> 'a t -> 'a
   val add : key -> 'a -> 'a t -> 'a t
 end
 
@@ -22,8 +22,10 @@ module Config =
 module AssocHamt = Hamt.Make (Config)
     (struct type t = int let hash = Hashtbl.hash end)
 
-module AssocMap = Map.Make
-    (struct type t = int let compare = compare end)
+module AssocMap = struct
+  include Map.Make (struct type t = int let compare = compare end)
+  let find_exn = find
+end
 
 let implem, nbiter, should_test_add, should_test_find =
   let format = "implem:(hamt|map) nbiter:[0-9]* options:(add|find)* [--arch64={true,false}]" in
@@ -69,7 +71,7 @@ let rec test_add t = function
 let rec test_find t = function
   | [] -> ()
   | i::input ->
-    begin try M.find i t with _ -> () end;
+    begin try M.find_exn i t with _ -> () end;
     test_find t input
 
 let () =
