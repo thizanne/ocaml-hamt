@@ -1,3 +1,5 @@
+_tags
+src/META
 setup.log
 setup.data
 myocamlbuild.ml

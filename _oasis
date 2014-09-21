@@ -5,10 +5,10 @@ Synopsis:    Implementation of the Hash Array Mapped Tries data structure for
   OCaml
 Authors:     Thibault Suzanne
 License:     MIT
+Plugins:     META (0.4)
 
 Library hamt
   Path:            src
   BuildTools:      ocamlbuild
   Modules:         Hamt
   InternalModules: BitUtils
-  
