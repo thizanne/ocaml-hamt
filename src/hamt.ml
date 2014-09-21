@@ -143,7 +143,9 @@ struct
 
   let singleton k v = Leaf (hash k, k, v)
 
-  let is_empty x = x = Empty
+  let is_empty = function
+    | Empty -> true
+    | _ -> false
 
   let rec cardinal = function
     | Empty -> 0
@@ -179,12 +181,12 @@ struct
     let tab' = Array.make (Array.length tab + 1) Empty in
     Array.blit tab 0 tab' 0 ix;
     Array.blit tab ix tab' (succ ix) (Array.length tab - ix);
-    tab'.(ix) <- v;
+    Array.unsafe_set tab' ix v;
     tab'
 
   let set_tab tab ix v =
     let tab' = Array.copy tab in
-    tab'.(ix) <- v;
+    Array.unsafe_set tab' ix v;
     tab'
 
   let rec combine_tip shift node1 node2 =
@@ -219,11 +221,11 @@ struct
       if ix = chunk then jx
       else if bitmap land 1 = 0 then fill (succ ix) jx (bitmap asr 1)
       else begin
-        tab.(ix) <- sub_nodes.(jx);
+        Array.unsafe_set tab ix (Array.unsafe_get sub_nodes jx);
         fill (succ ix) (succ jx) (bitmap asr 1)
       end in
     let n = fill 0 0 bitmap in
-    tab.(sub_hash) <- node;
+    Array.unsafe_set tab sub_hash node;
     ArrayNode (n, tab)
 
   let pack_array_node to_remove nb_children children =
@@ -231,10 +233,10 @@ struct
     let rec loop ix jx bitmap =
       if ix = chunk then BitmapIndexedNode (bitmap, base)
       else if
-        children.(ix) = Empty || to_remove ix
+        is_empty (Array.unsafe_get children ix) || to_remove ix
       then loop (succ ix) jx bitmap
       else begin
-        base.(jx) <- children.(ix);
+        Array.unsafe_set base jx (Array.unsafe_get children ix);
         loop (succ ix) (succ jx) (bitmap lor (1 lsl ix))
       end
     in loop 0 0 0
@@ -247,7 +249,9 @@ struct
     | HashCollision (h, li) -> HashCollision (h, li)
     | BitmapIndexedNode (bitmap, base) ->
       if Array.length base = 0 then Empty
-      else if Array.length base = 1 && is_tip_node base.(0) then base.(0)
+      else if Array.length base = 1 &&
+              is_tip_node (Array.unsafe_get base 0) then
+        Array.unsafe_get base 0
       else if Array.length base > bmnode_max then failwith "reify_node"
       else BitmapIndexedNode (bitmap, base)
     | ArrayNode (nb_children, children) ->
@@ -261,7 +265,7 @@ struct
     for i = 0 to mask do
       if nth_bit_set bitmap i
       then begin
-        children.(i) <- base.(!n);
+        Array.unsafe_set children i (Array.unsafe_get base !n);
         incr n
       end
     done;
@@ -308,20 +312,20 @@ struct
       let ix = from_bitmap bitmap sub_hash in
       let bit = 1 lsl sub_hash in
       let not_exists = bitmap land bit = 0 in
-      let child = if not_exists then Empty else base.(ix) in
+      let child = if not_exists then Empty else Array.unsafe_get base ix in
       let child = alter_node ~mute (shift + shift_step) hash key update child in
       begin
-        match change not_exists (child = Empty) with
+        match change not_exists (is_empty child) with
         | Nil -> bm_node
         | Modified ->
-          if mute then begin base.(ix) <- child; bm_node end
+          if mute then begin Array.unsafe_set base ix child; bm_node end
           else BitmapIndexedNode (bitmap, set_tab base ix child)
         | Removed ->
           let bitmap = (bitmap land (lnot bit)) land mask in
           if bitmap = 0 then Empty
           else
-          if Array.length base = 2 && is_tip_node base.(ix lxor 1)
-          then base.(ix lxor 1)
+          if Array.length base = 2 && is_tip_node (Array.unsafe_get base (ix lxor 1))
+          then Array.unsafe_get base (ix lxor 1)
           else BitmapIndexedNode (bitmap, remove base ix)
         | Added ->
           if Array.length base = bmnode_max
@@ -330,19 +334,21 @@ struct
       end
     | ArrayNode (nb_children, children) as arr_node ->
       let sub_hash = hash_fragment shift hash in
-      let child = children.(sub_hash) in
+      let child = Array.unsafe_get children sub_hash in
       let child' = alter_node ~mute (shift + shift_step) hash key update child in
-      match change (child = Empty) (child' = Empty) with
+      match change (is_empty child) (is_empty child') with
       | Nil -> arr_node
       | Added ->
         if mute then
           begin
-            children.(sub_hash) <- child';
+            Array.unsafe_set children sub_hash child';
             ArrayNode (succ nb_children, children)
           end
         else ArrayNode (succ nb_children, set_tab children sub_hash child')
       | Modified ->
-        if mute then begin children.(sub_hash) <- child'; arr_node end
+        if mute then begin
+          Array.unsafe_set children sub_hash child';
+          arr_node end
         else ArrayNode (nb_children, set_tab children sub_hash child')
       | Removed ->
         if nb_children = arrnode_min then
@@ -350,7 +356,7 @@ struct
         else
         if mute then
           begin
-            children.(sub_hash) <- Empty;
+            Array.unsafe_set children sub_hash Empty;
             ArrayNode (pred nb_children, children)
           end
         else ArrayNode (pred nb_children, set_tab children sub_hash Empty)
@@ -408,7 +414,7 @@ struct
       | [] -> [], []
       | i :: is ->
         begin
-          match alter_all f base.(n) with
+          match alter_all f (Array.unsafe_get base n) with
           | Empty -> aux (succ n) is
           | x ->
             let (iss, bss) = aux (succ n) is in
@@ -437,7 +443,7 @@ struct
     | ArrayNode (nb_children, children) ->
       let children = Array.map (alter_all f) children in
       let nb_children = Array.fold_left
-          (fun n v -> if v = Empty then n else succ n) 0 children in
+          (fun n v -> if is_empty v then n else succ n) 0 children in
       if nb_children < arrnode_min
       then pack_array_node (fun _ -> false) nb_children children
       else ArrayNode (nb_children, children)
@@ -473,10 +479,11 @@ struct
         let sub_hash = hash_fragment shift hash in
         let bit = 1 lsl sub_hash in
         if bitmap land bit = 0 then raise Not_found
-        else find (shift + shift_step) hash key base.(from_bitmap bitmap sub_hash)
+        else find (shift + shift_step) hash key
+            (Array.unsafe_get base (from_bitmap bitmap sub_hash))
       | ArrayNode (_, children) ->
-        let child = children.(hash_fragment shift hash) in
-        if child = Empty then raise Not_found
+        let child = Array.unsafe_get children (hash_fragment shift hash) in
+        if is_empty child then raise Not_found
         else find (shift + shift_step) hash key child
     in find 0 (hash key) key
 
@@ -525,10 +532,12 @@ struct
     | Empty -> raise Not_found
     | Leaf (_, k, v) -> (k, v)
     | HashCollision (_, li) -> List.hd li
-    | BitmapIndexedNode (_, base) -> choose base.(0)
+    | BitmapIndexedNode (_, base) -> choose (Array.unsafe_get base 0)
     | ArrayNode (_, children) ->
       let rec loop n =
-        if children.(n) = Empty then loop (succ n) else children.(n)
+        if is_empty (Array.unsafe_get children n)
+        then loop (succ n)
+        else Array.unsafe_get children n
       in choose (loop 0)
 
   let pop hamt =
@@ -539,7 +548,7 @@ struct
     let a = Array.make (List.length li) (List.hd li) in
     let rec aux n = function
       | [] -> ()
-      | x :: xs -> a.(n) <- x; aux (pred n) xs
+      | x :: xs -> Array.unsafe_set a n x; aux (pred n) xs
     in aux (pred (Array.length a)) li;
     a
 
@@ -549,11 +558,13 @@ struct
       let children = Array.make chunk Empty
       and nb_children = ref 0 in
       for i = 0 to mask do
-        let child = intersect_node shift f children1.(i) children2.(i) in
+        let child = intersect_node shift f
+            (Array.unsafe_get children1 i)
+            (Array.unsafe_get children2 i) in
         if child <> Empty then
           begin
             incr nb_children;
-            children.(i) <- child
+            Array.unsafe_set children i child
           end
       done;
       reify_node (ArrayNode (!nb_children, children))
@@ -585,12 +596,14 @@ struct
         if bitmap land bit = 0 then Empty
         else
           let n = ctpop (bitmap land (pred bit)) in
-          let node = intersect_node (shift + shift_step) f t1 base.(n) in
+          let node = intersect_node (shift + shift_step) f t1
+              (Array.unsafe_get base n) in
           reify_node (BitmapIndexedNode (bit, [|node|]))
       | HashCollision (h, li), ArrayNode (nb_children, children) ->
         let fragment = hash_fragment shift h in
         let child =
-          intersect_node (shift + shift_step) f t1 children.(fragment) in
+          intersect_node (shift + shift_step) f t1
+            (Array.unsafe_get children fragment) in
         reify_node (BitmapIndexedNode (1 lsl fragment, [|child|]))
       | BitmapIndexedNode (bitmap1, base1), BitmapIndexedNode (bitmap2, base2) ->
         let bitmap = bitmap1 land bitmap2 in
@@ -620,9 +633,11 @@ struct
       let nb_children = ref 0
       and children = Array.make chunk Empty in
       for i = 0 to mask do
-        let node = merge_node shift f children1.(i) children2.(i)
+        let node = merge_node shift f
+            (Array.unsafe_get children1 i)
+            (Array.unsafe_get children2 i)
         in if node <> Empty then incr nb_children;
-        children.(i) <- node
+        Array.unsafe_set children i node
       done;
       reify_node (ArrayNode (!nb_children, children))
 
