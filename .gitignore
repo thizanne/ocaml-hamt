@@ -1,3 +1,9 @@
+setup.log
+setup.data
+myocamlbuild.ml
+setup.ml
+*.mllib
+*.mldylib
 #*#
 *~
 *.cmi

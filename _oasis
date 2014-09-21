@@ -1,0 +1,14 @@
+OASISFormat: 0.4
+Name:        hamt
+Version:     0.1
+Synopsis:    Implementation of the Hash Array Mapped Tries data structure for
+  OCaml
+Authors:     Thibault Suzanne
+License:     MIT
+
+Library hamt
+  Path:            src
+  BuildTools:      ocamlbuild
+  Modules:         Hamt
+  InternalModules: BitUtils
+  
