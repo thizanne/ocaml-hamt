@@ -1,0 +1,9 @@
+#*#
+*~
+*.cmi
+*.cmo
+*.native
+*/_build
+_build
+TODO.org
+*.docdir
