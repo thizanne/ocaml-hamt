@@ -14,29 +14,29 @@ let n = int_of_string (Sys.argv.(1))
 let random_int bound =
   Int64.to_int (Random.int64 (Int64.of_int bound))
 
-let random min max = 
+let random min max =
   try random_int (max - min) + min
   with Invalid_argument "Random.int64" -> min
 
 let generate =
   let rec generate acc n =
     if n = 0 then acc
-    else generate (random_int Pervasives.max_int :: acc) (pred n) 
+    else generate (random_int Pervasives.max_int :: acc) (pred n)
   in generate []
-  
+
 let generate_different li =
   let rec aux acc = function
     | [] -> acc
     | [x] -> random x Pervasives.max_int :: acc
     | x :: y :: zs -> aux (random x y :: acc) (y :: zs)
   in aux [] (List.sort compare li)
-    
+
 (*
 let () = printf "Generating %d random integers\n%!" n
 let presents = List.sort compare (generate n)
 
-(* 
-   presents and absents might share elements, but it is highly unlikely 
+(*
+   presents and absents might share elements, but it is highly unlikely
    and should have negligeable effect if so
 *)
 let () = printf "Generating %d other random integers\n%!" n

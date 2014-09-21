@@ -28,9 +28,9 @@ module StdConfig : CONFIG
     are :
 
     {[
-    let shift_step = 5
-    let bmnode_max = 16
-    let arrnode_min = 8
+      let shift_step = 5
+      let bmnode_max = 16
+      let arrnode_min = 8
     ]}
 *)
 
@@ -39,9 +39,9 @@ module StdConfig32 : CONFIG
     are :
 
     {[
-    let shift_step = 4
-    let bmnode_max = 8
-    let arrnode_min = 4
+      let shift_step = 4
+      let bmnode_max = 8
+      let arrnode_min = 4
     ]}
 *)
 
@@ -315,8 +315,8 @@ module type S = sig
         raises [Not_found]. Strictly equivalent to [find k t]. *)
 
     val ( <-- ) : 'a t -> key * 'a -> 'a t
-  (** [t <-- (k, v)] adds to [t] a binding from [k] to [v] and
-      returns the result. Strictly equivalent to [add k v Hamt]. *)
+    (** [t <-- (k, v)] adds to [t] a binding from [k] to [v] and
+        returns the result. Strictly equivalent to [add k v Hamt]. *)
 
   end
 end
