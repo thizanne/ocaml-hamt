@@ -1,0 +1,12 @@
+language: c
+sudo: required
+install: wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-opam.sh
+script: bash -ex .travis-opam.sh
+env:
+  global:
+  - PACKAGE=hamt
+  matrix:
+  - OCAML_VERSION=4.02 OCAML_SWITCH=4.02.3
+  - OCAML_VERSION=4.10
+os:
+  - linux
