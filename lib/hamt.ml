@@ -1,5 +1,7 @@
 open BitUtils
 
+let () = print_string "Remove me"
+
 module type CONFIG = sig
   (* Number of bits taken from the hashed key at every step *)
   val shift_step : int
