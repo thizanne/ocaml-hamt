@@ -12,3 +12,10 @@
   (name param)
   (modules param)
   (libraries hamt))
+
+(ocamllex compte)
+
+(test
+  (name compte)
+  (modules compte)
+  (libraries hamt))
