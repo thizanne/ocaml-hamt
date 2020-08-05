@@ -1,5 +1,0 @@
-S src
-S benchmarks
-B _build
-B _build/benchmarks
-B _build/src
