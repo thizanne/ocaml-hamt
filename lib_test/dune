@@ -11,6 +11,7 @@
 (test
   (name param)
   (modules param)
+  (action (run %{test} hamt 1 add find --arch64=%{arch_sixtyfour}))
   (libraries hamt))
 
 (ocamllex compte)
@@ -18,4 +19,6 @@
 (test
   (name compte)
   (modules compte)
+  (deps chap1.txt chap2.txt)
+  (action (run %{test} %{deps} 20))
   (libraries hamt))

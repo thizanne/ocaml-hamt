@@ -14,7 +14,7 @@ let mem x t = Array.fold_left (fun b y -> b || x = y) false t
 
 module Config =
   (val
-    if mem "-32" Sys.argv
+    if mem "--arch64=false" Sys.argv
     then (module Hamt.StdConfig32)
     else (module Hamt.StdConfig)
     : Hamt.CONFIG)
@@ -26,7 +26,7 @@ module AssocMap = Map.Make
     (struct type t = int let compare = compare end)
 
 let implem, nbiter, should_test_add, should_test_find =
-  let format = "implem:(hamt|map) nbiter:[0-9]* options:(add|find)*" in
+  let format = "implem:(hamt|map) nbiter:[0-9]* options:(add|find)* [--arch64={true,false}]" in
   let error fmt =
     Printf.kfprintf (fun _ -> exit 1) stderr
       ("invalid command line (expected format %S)\n" ^^ fmt) format in
@@ -43,8 +43,9 @@ let implem, nbiter, should_test_add, should_test_find =
     let test_find = List.exists ((=) "find") options in
     let () =
       List.iter
-        (fun e -> if e <> "add" && e <> "find" then
-            error "invalid option %S\n" e)
+        (fun e ->
+           if e <> "add" && e <> "find" && e <> "--arch64=true" && e <> "--arch64=false"
+           then error "invalid option %S\n" e)
         options in
     implem, nbiter, test_add, test_find
   | _ ->
