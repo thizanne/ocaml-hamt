@@ -19,8 +19,7 @@ module Config =
     else (module Hamt.StdConfig)
     : Hamt.CONFIG)
 
-module AssocHamt = Hamt.Make (Config)
-    (struct type t = int let hash = Hashtbl.hash end)
+module AssocHamt = Hamt.Int
 
 module AssocMap = Map.Make
     (struct type t = int let compare = compare end)

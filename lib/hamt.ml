@@ -23,11 +23,6 @@ module StdConfig32 : CONFIG = struct
   let arrnode_min = 4
 end
 
-module type HASHABLE = sig
-  type t
-  val hash : t -> int
-end
-
 module type S = sig
   type key
   type 'a t
@@ -112,7 +107,7 @@ module type S = sig
   end
 end
 
-module Make (Config : CONFIG) (Key : HASHABLE) : S with type key = Key.t
+module Make (Config : CONFIG) (Key : Hashtbl.HashedType) : S with type key = Key.t
 =
 struct
 
