@@ -71,8 +71,8 @@ module type S = sig
 
   (** {3 Modify bindings } *)
 
-  val alter : key -> ('a option -> 'a option) -> 'a t -> 'a t
-  (** [alter k f t] adds, modifies or deletes the binding from the key
+  val update : key -> ('a option -> 'a option) -> 'a t -> 'a t
+  (** [update k f t] adds, modifies or deletes the binding from the key
       [k] in [t], returning the new table. If such a binding exists in
       [t] to a value [v], [f] is given [Some v], otherwise [None]. The
       presence of the binding from [k] in the result is determined the
@@ -98,8 +98,8 @@ module type S = sig
       returning the value previously bound from [k] and the new
       table. *)
 
-  val update : key -> ('a -> 'a option) -> 'a t -> 'a t
-  (** [update k f t] updates the binding from [k] in [t], optionnally
+  val alter : key -> ('a -> 'a option) -> 'a t -> 'a t
+  (** [alter k f t] updates the binding from [k] in [t], optionnally
       deleting it, and returns the new table. *)
 
   val modify : key -> ('a -> 'a) -> 'a t -> 'a t
@@ -293,7 +293,7 @@ module type S = sig
         contains a Hamt, it is left unmodified. *)
 
     val extract : key -> 'a t -> 'a option * 'a t
-    val update : key -> ('a -> 'a option) -> 'a t -> 'a t
+    val alter : key -> ('a -> 'a option) -> 'a t -> 'a t
     val modify : key -> ('a -> 'a) -> 'a t -> 'a t
     val find : key -> 'a t -> 'a option
     val choose : 'a t -> (key * 'a) option
