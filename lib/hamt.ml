@@ -31,6 +31,7 @@ module type S = sig
   val is_empty : 'a t -> bool
   val singleton : key -> 'a -> 'a t
   val cardinal : 'a t -> int
+  val length : 'a t -> int
 
   val alter : key -> ('a option -> 'a option) -> 'a t -> 'a t
   val add : key -> 'a -> 'a t -> 'a t
@@ -41,7 +42,7 @@ module type S = sig
   val modify : key -> ('a -> 'a) -> 'a t -> 'a t
   val modify_def : 'a -> key -> ('a -> 'a) -> 'a t -> 'a t
 
-  val find : key -> 'a t -> 'a
+  val find_exn : key -> 'a t -> 'a
   val mem : key -> 'a t -> bool
   val choose : 'a t -> key * 'a
   val pop : 'a t -> (key * 'a) * 'a t
@@ -143,6 +144,8 @@ struct
       Array.fold_left (fun acc child -> acc + cardinal child) 0 base
     | ArrayNode (_, children) ->
       Array.fold_left (fun acc child -> acc + cardinal child) 0 children
+
+  let length = cardinal
 
   let is_tip_node = function
     | Empty | Leaf (_, _, _) | HashCollision (_, _) -> true
@@ -449,7 +452,7 @@ struct
     | BitmapIndexedNode (_, base) -> Array.iter (iter f) base
     | ArrayNode (_, children) -> Array.iter (iter f) children
 
-  let find key =
+  let find_exn key =
     let rec find shift hash key = function
       | Empty -> raise Not_found
       | Leaf (_, k, v) -> if k = key then v else raise Not_found
@@ -467,7 +470,7 @@ struct
 
   let mem key hamt =
     try
-      let _ = find key hamt in true
+      let _ = find_exn key hamt in true
     with
     | Not_found -> false
 
@@ -542,7 +545,7 @@ struct
       | Empty, _ -> Empty
       | Leaf (h, k, v), _ ->
         begin
-          try Leaf (h, k, f k v (find k t2))
+          try Leaf (h, k, f k v (find_exn k t2))
           with Not_found -> Empty
         end
       | HashCollision (h1, li1), HashCollision (h2, li2)->
@@ -684,12 +687,12 @@ struct
     let extract k hamt = try let v, r = extract k hamt in Some v, r with Not_found -> None, hamt
     let update k f hamt = try update k f hamt with Not_found -> hamt
     let modify k f hamt = try modify k f hamt with Not_found -> hamt
-    let find k hamt = try Some (find k hamt) with Not_found -> None
+    let find k hamt = try Some (find_exn k hamt) with Not_found -> None
     let choose hamt = try Some (choose hamt) with Not_found -> None
   end
 
   module Infix = struct
-    let ( --> ) hamt k = find k hamt
+    let ( --> ) hamt k = find_exn k hamt
     let ( <-- ) hamt (k, v) = add k v hamt
   end
 end
