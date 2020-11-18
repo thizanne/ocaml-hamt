@@ -33,12 +33,12 @@ module type S = sig
   val cardinal : 'a t -> int
   val length : 'a t -> int
 
-  val alter : key -> ('a option -> 'a option) -> 'a t -> 'a t
+  val update : key -> ('a option -> 'a option) -> 'a t -> 'a t
   val add : key -> 'a -> 'a t -> 'a t
   val add_carry : key -> 'a -> 'a t -> 'a t * 'a option
   val remove : key -> 'a t -> 'a t
   val extract : key -> 'a t -> 'a * 'a t
-  val update : key -> ('a -> 'a option) -> 'a t -> 'a t
+  val alter : key -> ('a -> 'a option) -> 'a t -> 'a t
   val modify : key -> ('a -> 'a) -> 'a t -> 'a t
   val modify_def : 'a -> key -> ('a -> 'a) -> 'a t -> 'a t
 
@@ -95,7 +95,7 @@ module type S = sig
   module ExceptionLess :
   sig
     val extract : key -> 'a t -> 'a option * 'a t
-    val update : key -> ('a -> 'a option) -> 'a t -> 'a t
+    val alter : key -> ('a -> 'a option) -> 'a t -> 'a t
     val modify : key -> ('a -> 'a) -> 'a t -> 'a t
     val find : key -> 'a t -> 'a option
     val choose : 'a t -> (key * 'a) option
@@ -350,37 +350,37 @@ struct
     | ArrayNode (nb_children, children) ->
       ArrayNode (nb_children, Array.map copy children)
 
-  let alter key update hamt =
+  let update key update hamt =
     alter_node 0 (hash key) key update hamt
 
   let add k v hamt =
-    alter k (fun _ -> Some v) hamt
+    update k (fun _ -> Some v) hamt
 
   let add_mute k v hamt =
     alter_node ~mute:true 0 (hash k) k (fun _ -> Some v) hamt
 
   let add_carry k v hamt =
     let previous_value = ref None in
-    let r = alter k (fun v' -> previous_value := v'; Some v) hamt in
+    let r = update k (fun v' -> previous_value := v'; Some v) hamt in
     r, !previous_value
 
   let remove k hamt =
-    alter k (fun _ -> None) hamt
+    update k (fun _ -> None) hamt
 
   let extract k hamt =
     let value = ref (Obj.magic 0)  in
-    let r = alter k
+    let r = update k
         (function None -> raise Not_found | Some v -> value := v; None) hamt in
     !value, r
 
-  let update k f hamt =
-    alter k (function None -> raise Not_found | Some v -> f v) hamt
+  let alter k f hamt =
+    update k (function None -> raise Not_found | Some v -> f v) hamt
 
   let modify k f hamt =
-    alter k (function None -> raise Not_found | Some v -> Some (f v)) hamt
+    update k (function None -> raise Not_found | Some v -> Some (f v)) hamt
 
   let modify_def v0 k f hamt =
-    alter k (function None -> Some (f v0) | Some v -> Some (f v)) hamt
+    update k (function None -> Some (f v0) | Some v -> Some (f v)) hamt
 
   let rec alter_hc f = function
     | [] -> []
@@ -526,65 +526,65 @@ struct
   let rec intersect_array :
     'a 'b. int -> (key -> 'a -> 'b -> 'c) -> 'a t array -> 'b t array -> 'c t =
     fun shift f children1 children2 ->
-      let children = Array.make chunk Empty
-      and nb_children = ref 0 in
-      for i = 0 to mask do
-        let child = intersect_node shift f children1.(i) children2.(i) in
-        if child <> Empty then
-          begin
-            incr nb_children;
-            children.(i) <- child
-          end
-      done;
-      reify_node (ArrayNode (!nb_children, children))
+    let children = Array.make chunk Empty
+    and nb_children = ref 0 in
+    for i = 0 to mask do
+      let child = intersect_node shift f children1.(i) children2.(i) in
+      if child <> Empty then
+        begin
+          incr nb_children;
+          children.(i) <- child
+        end
+    done;
+    reify_node (ArrayNode (!nb_children, children))
 
   and intersect_node :
     'a 'b. int -> (key -> 'a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t =
     fun shift f t1 t2 ->
-      match (t1, t2) with
-      | Empty, _ -> Empty
-      | Leaf (h, k, v), _ ->
-        begin
-          try Leaf (h, k, f k v (find_exn k t2))
-          with Not_found -> Empty
-        end
-      | HashCollision (h1, li1), HashCollision (h2, li2)->
-        if h1 <> h2
-        then Empty
-        else
-          reify_node (
-            HashCollision (
-              h1,
-              List.fold_left
-                (fun acc (k, v) ->
-                   try (k, f k v (List.assoc k li2)) :: acc
-                   with Not_found -> acc)
-                [] li1))
-      | HashCollision (h, _li), BitmapIndexedNode (bitmap, base) ->
-        let bit = 1 lsl (hash_fragment shift h) in
-        if bitmap land bit = 0 then Empty
-        else
-          let n = ctpop (bitmap land (pred bit)) in
-          let node = intersect_node (shift + shift_step) f t1 base.(n) in
-          reify_node (BitmapIndexedNode (bit, [|node|]))
-      | HashCollision (h, _li), ArrayNode (_nb_children, children) ->
-        let fragment = hash_fragment shift h in
-        let child =
-          intersect_node (shift + shift_step) f t1 children.(fragment) in
-        reify_node (BitmapIndexedNode (1 lsl fragment, [|child|]))
-      | BitmapIndexedNode (bitmap1, base1), BitmapIndexedNode (bitmap2, base2) ->
-        let bitmap = bitmap1 land bitmap2 in
-        if bitmap = 0 then Empty
-        else
-          intersect_array (shift + shift_step) f
-            (bitmap_to_array bitmap1 base1)
-            (bitmap_to_array bitmap2 base2)
-      | BitmapIndexedNode (bitmap, base), ArrayNode (_, children) ->
+    match (t1, t2) with
+    | Empty, _ -> Empty
+    | Leaf (h, k, v), _ ->
+      begin
+        try Leaf (h, k, f k v (find_exn k t2))
+        with Not_found -> Empty
+      end
+    | HashCollision (h1, li1), HashCollision (h2, li2)->
+      if h1 <> h2
+      then Empty
+      else
+        reify_node (
+          HashCollision (
+            h1,
+            List.fold_left
+              (fun acc (k, v) ->
+                 try (k, f k v (List.assoc k li2)) :: acc
+                 with Not_found -> acc)
+              [] li1))
+    | HashCollision (h, _li), BitmapIndexedNode (bitmap, base) ->
+      let bit = 1 lsl (hash_fragment shift h) in
+      if bitmap land bit = 0 then Empty
+      else
+        let n = ctpop (bitmap land (pred bit)) in
+        let node = intersect_node (shift + shift_step) f t1 base.(n) in
+        reify_node (BitmapIndexedNode (bit, [|node|]))
+    | HashCollision (h, _li), ArrayNode (_nb_children, children) ->
+      let fragment = hash_fragment shift h in
+      let child =
+        intersect_node (shift + shift_step) f t1 children.(fragment) in
+      reify_node (BitmapIndexedNode (1 lsl fragment, [|child|]))
+    | BitmapIndexedNode (bitmap1, base1), BitmapIndexedNode (bitmap2, base2) ->
+      let bitmap = bitmap1 land bitmap2 in
+      if bitmap = 0 then Empty
+      else
         intersect_array (shift + shift_step) f
-          (bitmap_to_array bitmap base) children
-      | ArrayNode (_, children1), ArrayNode (_, children2) ->
-        intersect_array (shift + shift_step) f children1 children2
-      | _, _ -> intersect_node shift (fun k x y -> f k y x) t2 t1
+          (bitmap_to_array bitmap1 base1)
+          (bitmap_to_array bitmap2 base2)
+    | BitmapIndexedNode (bitmap, base), ArrayNode (_, children) ->
+      intersect_array (shift + shift_step) f
+        (bitmap_to_array bitmap base) children
+    | ArrayNode (_, children1), ArrayNode (_, children2) ->
+      intersect_array (shift + shift_step) f children1 children2
+    | _, _ -> intersect_node shift (fun k x y -> f k y x) t2 t1
 
   let intersecti f t1 t2 =
     intersect_node 0 f t1 t2
@@ -594,17 +594,17 @@ struct
 
   let rec merge_array :
     'a 'b.
-         int -> (key -> 'a option -> 'b option -> 'c option) ->
+    int -> (key -> 'a option -> 'b option -> 'c option) ->
     'a t array -> 'b t array -> 'c t =
     fun shift f children1 children2 ->
-      let nb_children = ref 0
-      and children = Array.make chunk Empty in
-      for i = 0 to mask do
-        let node = merge_node shift f children1.(i) children2.(i)
-        in if node <> Empty then incr nb_children;
-        children.(i) <- node
-      done;
-      reify_node (ArrayNode (!nb_children, children))
+    let nb_children = ref 0
+    and children = Array.make chunk Empty in
+    for i = 0 to mask do
+      let node = merge_node shift f children1.(i) children2.(i)
+      in if node <> Empty then incr nb_children;
+      children.(i) <- node
+    done;
+    reify_node (ArrayNode (!nb_children, children))
 
   and merge_node :
     'a 'b. int ->
@@ -685,7 +685,7 @@ struct
 
   module ExceptionLess = struct
     let extract k hamt = try let v, r = extract k hamt in Some v, r with Not_found -> None, hamt
-    let update k f hamt = try update k f hamt with Not_found -> hamt
+    let alter k f hamt = try alter k f hamt with Not_found -> hamt
     let modify k f hamt = try modify k f hamt with Not_found -> hamt
     let find k hamt = try Some (find_exn k hamt) with Not_found -> None
     let choose hamt = try Some (choose hamt) with Not_found -> None
