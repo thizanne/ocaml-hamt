@@ -5,6 +5,7 @@
     @author Thibault Suzanne
 *)
 
+(** Input signature of the size configuration of the structure. *)
 module type CONFIG = sig
   val shift_step : int
   (** The number of bits taken from the hashed key at every step of an
@@ -19,9 +20,7 @@ module type CONFIG = sig
   val arrnode_min : int
   (** Arbitrary. Must be lesser than [bmnode_max]. A good value seems
       to be [bmnode_max / 2]. *)
-
 end
-(** Input signature of the size configuration of the structure. *)
 
 module StdConfig : CONFIG
 (** Standard configuration for 64-bits architectures. Its parameters
@@ -207,8 +206,7 @@ module type S = sig
       [k] is bound to [v1] in [t1] and to [v2] in [t2]. *)
 
   val merge :
-    (key -> 'a option -> 'b option -> 'c option) ->
-    'a t -> 'b t -> 'c t
+    (key -> 'a option -> 'b option -> 'c option) -> 'a t -> 'b t -> 'c t
   (** [merge f t1 t2] returns a table whose keys is a subset of the
       keys of [t1] and [t2]. The presence in the result of each such
       binding, and its corresponding value, are determined by the
@@ -239,11 +237,8 @@ module type S = sig
       is not yet determined and must be analysed in your own case. *)
 
   module Import : sig
-
     (** Input signature of the module {!Make}, representing datas to be imported in Hamt. *)
-    module type FOLDABLE =
-    sig
-
+    module type FOLDABLE = sig
       type key
       (** The type of your datas' keys. *)
 
@@ -255,11 +250,9 @@ module type S = sig
           a function to every binding of your structure, building the
           Hamt by accumulation on the third parameter of this
           function. *)
-
     end
 
-    module Make (M : FOLDABLE with type key = key) :
-    sig
+    module Make (M : FOLDABLE with type key = key) : sig
       val add_from : 'a M.t -> 'a t -> 'a t
       (** [add_from s t] adds every binding of [s] to the Hamt [t]. *)
 
@@ -267,8 +260,7 @@ module type S = sig
       (** [from s] buils a Hamt containing every binding of [s].*)
     end
 
-    module AssocList :
-    sig
+    module AssocList : sig
       val add_from : (key * 'a) list -> 'a t -> 'a t
       (** [add_from li t] adds every binding of the association list
           [li] to the Hamt t. *)
@@ -277,31 +269,30 @@ module type S = sig
       (** [from li] builds a Hamt containing every binding of
           the association list [li]. *)
     end
-
   end
-
 
   (** {2 Alternative operations } *)
 
   (** Operations without exceptions. *)
-  module ExceptionLess :
-  sig
-
+  module ExceptionLess : sig
     (** These functions do not raise [Not_found] if they do not find
         a relevant binding. In this case, they use the [option] type
         to return [None] as this binding, and if their results
         contains a Hamt, it is left unmodified. *)
 
     val extract : key -> 'a t -> 'a option * 'a t
+
     val alter : key -> ('a -> 'a option) -> 'a t -> 'a t
+
     val modify : key -> ('a -> 'a) -> 'a t -> 'a t
+
     val find : key -> 'a t -> 'a option
+
     val choose : 'a t -> (key * 'a) option
   end
 
   (** Infix operations. *)
-  module Infix :
-  sig
+  module Infix : sig
     val ( --> ) : 'a t -> key -> 'a
     (** [t --> k] returns the current binding of [k] in [t], or
         raises [Not_found]. Strictly equivalent to [find_exn k t]. *)
@@ -309,15 +300,16 @@ module type S = sig
     val ( <-- ) : 'a t -> key * 'a -> 'a t
     (** [t <-- (k, v)] adds to [t] a binding from [k] to [v] and
         returns the result. Strictly equivalent to [add k v Hamt]. *)
-
   end
 end
 
-module Make (Config : CONFIG) (Key : Hashtbl.HashedType) : S with type key = Key.t
 (** Functor building an implementation of the Hamt structure,
     given a hashable type. *)
+module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
+  S with type key = Key.t
 
 module Make' (Key : Hashtbl.HashedType) : S with type key = Key.t
 
 module String : S with type key = string
+
 module Int : S with type key = int
