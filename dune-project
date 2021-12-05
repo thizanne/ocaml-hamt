@@ -1,4 +1,4 @@
-(lang dune 1.11)
+(lang dune 2.9)
 (name hamt)
 (generate_opam_files true)
 (maintainers "thi.suzanne@gmail.com" "rudi.grinberg@gmail.com" "marek@xivilization.net")

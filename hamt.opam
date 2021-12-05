@@ -14,14 +14,15 @@ homepage: "https://github.com/thizanne/ocaml-hamt"
 doc: "https://thizanne.github.io/ocaml-hamt/"
 bug-reports: "https://github.com/thizanne/ocaml-hamt/issues"
 depends: [
-  "dune" {>= "1.11"}
+  "dune" {>= "2.9"}
   "stdlib-shims"
   "ocaml" {>= "4.02.3"}
   "core" {with-test & >= "v0.11"}
   "core_bench" {with-test & >= "v0.11"}
+  "odoc" {with-doc}
 ]
 build: [
-  ["dune" "subst"] {pinned}
+  ["dune" "subst"] {dev}
   [
     "dune"
     "build"
@@ -29,9 +30,11 @@ build: [
     name
     "-j"
     jobs
+    "--promote-install-files=false"
     "@install"
     "@runtest" {with-test}
     "@doc" {with-doc}
   ]
+  ["dune" "install" "-p" name "--create-install-files" name]
 ]
 dev-repo: "git+https://github.com/thizanne/ocaml-hamt.git"
