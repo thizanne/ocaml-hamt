@@ -735,21 +735,14 @@ end
 
 module Make' = Make (StdConfig)
 
-module With_polymorphic (M : sig
-  type t
-end) =
-struct
-  include M
-
-  let equal = Stdlib.( = )
+module String = Make' (struct
+  include String
 
   let hash = Hashtbl.hash
-end
+end)
 
-module String = Make' (With_polymorphic (struct
-  type t = string
-end))
+module Int = Make' (struct
+  include Int
 
-module Int = Make' (With_polymorphic (struct
-  type t = int
-end))
+  let hash = Hashtbl.hash
+end)
