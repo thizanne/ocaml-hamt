@@ -2,12 +2,15 @@
   This whole file is ugly
 *)
 
-
 open Printf
 
 let () = Random.self_init ()
 
-module IntMap = Map.Make (struct type t = int let compare = compare end)
+module IntMap = Map.Make (struct
+  type t = int
+
+  let compare = compare
+end)
 
 module Hamt = Hamt.Int
 
@@ -15,28 +18,26 @@ module Hamt = Hamt.Int
 
 let n = 100
 
-let random_int bound =
-  Int64.to_int (Random.int64 (Int64.of_int bound))
+let random_int bound = Int64.to_int (Random.int64 (Int64.of_int bound))
 
 let random min max =
   try random_int (max - min) + min
-  with Invalid_argument reason ->
-    match reason with
-    | "Random.int64" -> min
-    | otherwise -> failwith otherwise
+  with Invalid_argument reason -> (
+    match reason with "Random.int64" -> min | otherwise -> failwith otherwise)
 
 let generate =
   let rec generate acc n =
-    if n = 0 then acc
-    else generate (random_int Stdlib.max_int :: acc) (pred n)
-  in generate []
+    if n = 0 then acc else generate (random_int Stdlib.max_int :: acc) (pred n)
+  in
+  generate []
 
 let generate_different li =
   let rec aux acc = function
     | [] -> acc
-    | [x] -> random x Stdlib.max_int :: acc
+    | [ x ] -> random x Stdlib.max_int :: acc
     | x :: y :: zs -> aux (random x y :: acc) (y :: zs)
-  in aux [] (List.sort compare li)
+  in
+  aux [] (List.sort compare li)
 
 (*
 let () = printf "Generating %d random integers\n%!" n
@@ -73,8 +74,11 @@ let rec fill n acc =
   else fill (pred n) (Hamt.add (random_int Stdlib.max_int) n acc)
 
 let () = printf "\nInserting elements in a IntMap\n%!"
+
 let before = Sys.time ()
+
 let map = fill n Hamt.empty
+
 let () = printf "%f\n%!" (Sys.time () -. before)
 
 let () = print_int (Hamt.cardinal map)
