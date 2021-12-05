@@ -212,13 +212,8 @@ module type S = sig
       binding, and its corresponding value, are determined by the
       function [f]. *)
 
-  val union : 'a t -> 'a t -> 'a t
-  (** [union t1 t2] returns a table whose keys are all keys presents in
-      [t1] or in [t2]. If the key is present in both tables, the
-      corresponding value is the one bound in [t2]. *)
-
-  val union_f : (key -> 'a -> 'a -> 'a) -> 'a t -> 'a t -> 'a t
-  (** [union_f f t1 t2] returns a table whose keys are all keys
+  val union : (key -> 'a -> 'a -> 'a) -> 'a t -> 'a t -> 'a t
+  (** [union f t1 t2] returns a table whose keys are all keys
       presents in [t1] or in [t2]. If a key [k] is present in only one
       table, the corresponding value is chosen in the result. If it is
       bound to [v1] in [t1] and [v2] in [t2], the value in the result

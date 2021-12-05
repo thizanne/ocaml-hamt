@@ -101,9 +101,7 @@ module type S = sig
   val merge :
     (key -> 'a option -> 'b option -> 'c option) -> 'a t -> 'b t -> 'c t
 
-  val union : 'a t -> 'a t -> 'a t
-
-  val union_f : (key -> 'a -> 'a -> 'a) -> 'a t -> 'a t -> 'a t
+  val union : (key -> 'a -> 'a -> 'a) -> 'a t -> 'a t -> 'a t
 
   module Import : sig
     module type FOLDABLE = sig
@@ -674,10 +672,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
   let merge f t1 t2 = merge_node 0 f t1 t2
 
-  let union t1 t2 =
-    merge (fun _ x y -> match (x, y) with _, None -> x | _, _ -> y) t1 t2
-
-  let union_f f t1 t2 =
+  let union f t1 t2 =
     merge
       (fun k x y ->
         match (x, y) with
