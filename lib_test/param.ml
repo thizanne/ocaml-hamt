@@ -9,7 +9,7 @@ module type Assoc = sig
 
   val empty : 'a t
 
-  val find_exn : key -> 'a t -> 'a
+  val find : key -> 'a t -> 'a
 
   val add : key -> 'a -> 'a t -> 'a t
 end
@@ -29,7 +29,7 @@ module AssocMap = struct
     let compare = compare
   end)
 
-  let find_exn = find
+  let find = find
 end
 
 let implem, nbiter, should_test_add, should_test_find =
@@ -84,7 +84,7 @@ let rec test_add t = function
 let rec test_find t = function
   | [] -> ()
   | i :: input ->
-      (try M.find_exn i t with _ -> ());
+      (try M.find i t with _ -> ());
       test_find t input
 
 let () =

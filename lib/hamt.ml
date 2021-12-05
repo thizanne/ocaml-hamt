@@ -58,11 +58,15 @@ module type S = sig
 
   val modify_def : 'a -> key -> ('a -> 'a) -> 'a t -> 'a t
 
-  val find_exn : key -> 'a t -> 'a
+  val find : key -> 'a t -> 'a
+
+  val find_opt : key -> 'a t -> 'a option
 
   val mem : key -> 'a t -> bool
 
   val choose : 'a t -> key * 'a
+
+  val choose_opt : 'a t -> (key * 'a) option
 
   val pop : 'a t -> (key * 'a) * 'a t
 
@@ -71,6 +75,10 @@ module type S = sig
   val values : 'a t -> 'a list
 
   val bindings : 'a t -> (key * 'a) list
+
+  val to_seq : 'a t -> (key * 'a) Seq.t
+
+  val of_seq : (key * 'a) Seq.t -> 'a t
 
   val iter : (key -> 'a -> unit) -> 'a t -> unit
 
@@ -475,7 +483,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | BitmapIndexedNode (_, base) -> Array.iter (iter f) base
     | ArrayNode (_, children) -> Array.iter (iter f) children
 
-  let find_exn key =
+  let find key =
     let rec find shift hash key = function
       | Empty -> raise Not_found
       | Leaf (_, k, v) -> if k = key then v else raise Not_found
@@ -494,9 +502,12 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     in
     find 0 (hash key) key
 
+  let find_opt key t =
+    match find key t with e -> Some e | exception Not_found -> None
+
   let mem key hamt =
     try
-      let _ = find_exn key hamt in
+      let _ = find key hamt in
       true
     with Not_found -> false
 
@@ -512,6 +523,31 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
   let foldv f hamt v0 = fold (fun _k v acc -> f v acc) hamt v0
 
   let bindings hamt = fold (fun k v acc -> (k, v) :: acc) hamt []
+
+  let to_seq =
+    let rec flat_map f seq () =
+      match seq () with
+      | Seq.Nil -> Seq.Nil
+      | Cons (x, next) -> Seq.append (f x) (flat_map f next) ()
+    in
+    let rec to_seq = function
+      | Empty -> Seq.empty
+      | Leaf (_, k, v) -> fun () -> Seq.Cons ((k, v), Seq.empty)
+      | HashCollision (_, list) -> List.to_seq list
+      | ArrayNode (_, arr) | BitmapIndexedNode (_, arr) ->
+          flat_map to_seq (Array.to_seq arr)
+    in
+    to_seq
+
+  let of_seq =
+    let rec loop seq acc =
+      match seq () with
+      | Seq.Nil -> acc
+      | Cons ((k, v), seq) ->
+          let acc = add_mute k v acc in
+          loop seq acc
+    in
+    fun seq -> loop seq empty
 
   let keys hamt = fold (fun k _v acc -> k :: acc) hamt []
 
@@ -544,6 +580,9 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         in
         choose (loop 0)
 
+  let choose_opt t =
+    match choose t with exception Not_found -> None | x -> Some x
+
   let pop hamt =
     let k, v = choose hamt in
     ((k, v), remove k hamt)
@@ -567,7 +606,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     match (t1, t2) with
     | Empty, _ -> Empty
     | Leaf (h, k, v), _ -> (
-        try Leaf (h, k, f k v (find_exn k t2)) with Not_found -> Empty)
+        try Leaf (h, k, f k v (find k t2)) with Not_found -> Empty)
     | HashCollision (h1, li1), HashCollision (h2, li2) ->
         if h1 <> h2 then Empty
         else
@@ -721,13 +760,13 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
     let modify k f hamt = try modify k f hamt with Not_found -> hamt
 
-    let find k hamt = try Some (find_exn k hamt) with Not_found -> None
+    let find k hamt = try Some (find k hamt) with Not_found -> None
 
     let choose hamt = try Some (choose hamt) with Not_found -> None
   end
 
   module Infix = struct
-    let ( --> ) hamt k = find_exn k hamt
+    let ( --> ) hamt k = find k hamt
 
     let ( <-- ) hamt (k, v) = add k v hamt
   end

@@ -112,14 +112,20 @@ module type S = sig
 
   (** {3 Getting elements } *)
 
-  val find_exn : key -> 'a t -> 'a
-  (** [find_exn k t] returns the value bound from the key [k] in [t]. If
+  val find : key -> 'a t -> 'a
+  (** [find k t] returns the value bound from the key [k] in [t]. If
       there is no such binding, [Not_found] is raised. *)
+
+  val find_opt : key -> 'a t -> 'a option
 
   val mem : key -> 'a t -> bool
   (** Checks for the presence of a binding from a key in a table. *)
 
   val choose : 'a t -> key * 'a
+  (** Returns a binding from a table, which one is unspecified. If the
+      table is [Empty], raises [Not_found]. *)
+
+  val choose_opt : 'a t -> (key * 'a) option
   (** Returns a binding from a table, which one is unspecified. If the
       table is [Empty], raises [Not_found]. *)
 
@@ -140,6 +146,10 @@ module type S = sig
   val bindings : 'a t -> (key * 'a) list
   (** Returns the list of the bindings [(key, value)] of a table
       (order unspecified). *)
+
+  val to_seq : 'a t -> (key * 'a) Seq.t
+
+  val of_seq : (key * 'a) Seq.t -> 'a t
 
   val iter : (key -> 'a -> unit) -> 'a t -> unit
   (** Iterates the application of a function over the bindings of a table. *)
