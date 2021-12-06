@@ -1,0 +1,3 @@
+(executable
+ (name bench)
+ (libraries hamt core core_bench))
