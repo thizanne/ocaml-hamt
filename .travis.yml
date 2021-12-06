@@ -7,6 +7,6 @@ env:
   - PACKAGE=hamt
   matrix:
   - OCAML_VERSION=4.02 TESTS=false
-  - OCAML_VERSION=4.10
+  - OCAML_VERSION=4.12
 os:
   - linux
