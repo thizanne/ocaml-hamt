@@ -519,9 +519,15 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
   let values hamt = fold (fun _k v acc -> v :: acc) hamt []
 
-  let for_all f hamt = fold (fun k v acc -> f k v && acc) hamt true
+  let for_all f hamt =
+    match iter (fun k v -> if not (f k v) then raise_notrace Exit) hamt with
+    | () -> true
+    | exception Exit -> false
 
-  let exists f hamt = fold (fun k v acc -> f k v || acc) hamt false
+  let exists f hamt =
+    match iter (fun k v -> if f k v then raise_notrace Exit) hamt with
+    | () -> false
+    | exception Exit -> true
 
   let partition f hamt =
     fold
