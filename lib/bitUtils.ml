@@ -1,9 +1,6 @@
 let sk5 = 0x55555555
-
 let sk3 = 0x33333333
-
 let skf0 = 0xf0f0f0f
-
 let skff = 0xff00ff
 
 let ctpop map =
@@ -28,5 +25,4 @@ let bitmap_to_indices bitmap =
   loop 0 bitmap
 
 let indices_to_bitmap = List.fold_left (fun x i -> x lor (1 lsl i)) 0
-
 let nth_bit_set bitmap n = (bitmap asr n) land 1 = 1

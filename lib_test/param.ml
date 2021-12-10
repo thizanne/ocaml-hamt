@@ -4,13 +4,10 @@
 
 module type Assoc = sig
   type key = int
-
   type 'a t
 
   val empty : 'a t
-
   val find : key -> 'a t -> 'a
-
   val add : key -> 'a -> 'a t -> 'a t
 end
 
