@@ -148,7 +148,6 @@ module type S = sig
       (order unspecified). *)
 
   val to_seq : 'a t -> (key * 'a) Seq.t
-
   val of_seq : (key * 'a) Seq.t -> 'a t
 
   val iter : (key -> 'a -> unit) -> 'a t -> unit
@@ -286,13 +285,9 @@ module type S = sig
         contains a Hamt, it is left unmodified. *)
 
     val extract : key -> 'a t -> 'a option * 'a t
-
     val alter : key -> ('a -> 'a option) -> 'a t -> 'a t
-
     val modify : key -> ('a -> 'a) -> 'a t -> 'a t
-
     val find : key -> 'a t -> 'a option
-
     val choose : 'a t -> (key * 'a) option
   end
 
@@ -314,7 +309,5 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
   S with type key = Key.t
 
 module Make' (Key : Hashtbl.HashedType) : S with type key = Key.t
-
 module String : S with type key = string
-
 module Int : S with type key = int

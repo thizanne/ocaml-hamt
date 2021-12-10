@@ -1,7 +1,6 @@
 open Core_bench
 
 let max_rand = 1_000_000
-
 let () = Random.self_init ()
 
 module IntMap = Map.Make (Int)

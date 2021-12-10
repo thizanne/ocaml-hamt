@@ -17,7 +17,6 @@ module Hamt = Hamt.Int
 (* let n = int_of_string (Sys.argv.(1)) *)
 
 let n = 100
-
 let random_int bound = Int64.to_int (Random.int64 (Int64.of_int bound))
 
 let random min max =
@@ -74,13 +73,9 @@ let rec fill n acc =
   else fill (pred n) (Hamt.add (random_int Stdlib.max_int) n acc)
 
 let () = printf "\nInserting elements in a IntMap\n%!"
-
 let before = Sys.time ()
-
 let map = fill n Hamt.empty
-
 let () = printf "%f\n%!" (Sys.time () -. before)
-
 let () = print_int (Hamt.cardinal map)
 
 (*

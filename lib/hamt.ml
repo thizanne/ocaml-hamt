@@ -13,97 +13,56 @@ end
 
 module StdConfig : CONFIG = struct
   let shift_step = 5
-
   let bmnode_max = 16
-
   let arrnode_min = 8
 end
 
 module StdConfig32 : CONFIG = struct
   let shift_step = 4
-
   let bmnode_max = 8
-
   let arrnode_min = 4
 end
 
 module type S = sig
   type key
-
   type 'a t
 
   val empty : 'a t
-
   val is_empty : 'a t -> bool
-
   val singleton : key -> 'a -> 'a t
-
   val cardinal : 'a t -> int
-
   val length : 'a t -> int
-
   val update : key -> ('a option -> 'a option) -> 'a t -> 'a t
-
   val add : key -> 'a -> 'a t -> 'a t
-
   val add_carry : key -> 'a -> 'a t -> 'a t * 'a option
-
   val remove : key -> 'a t -> 'a t
-
   val extract : key -> 'a t -> 'a * 'a t
-
   val alter : key -> ('a -> 'a option) -> 'a t -> 'a t
-
   val modify : key -> ('a -> 'a) -> 'a t -> 'a t
-
   val modify_def : 'a -> key -> ('a -> 'a) -> 'a t -> 'a t
-
   val find : key -> 'a t -> 'a
-
   val find_opt : key -> 'a t -> 'a option
-
   val mem : key -> 'a t -> bool
-
   val choose : 'a t -> key * 'a
-
   val choose_opt : 'a t -> (key * 'a) option
-
   val pop : 'a t -> (key * 'a) * 'a t
-
   val keys : 'a t -> key list
-
   val values : 'a t -> 'a list
-
   val bindings : 'a t -> (key * 'a) list
-
   val to_seq : 'a t -> (key * 'a) Seq.t
-
   val of_seq : (key * 'a) Seq.t -> 'a t
-
   val iter : (key -> 'a -> unit) -> 'a t -> unit
-
   val map : ('a -> 'b) -> 'a t -> 'b t
-
   val mapi : (key -> 'a -> 'b) -> 'a t -> 'b t
-
   val filterv : ('a -> bool) -> 'a t -> 'a t
-
   val filter : (key -> 'a -> bool) -> 'a t -> 'a t
-
   val filter_map : (key -> 'a -> 'b option) -> 'a t -> 'b t
-
   val foldv : ('a -> 'b -> 'b) -> 'a t -> 'b -> 'b
-
   val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
-
   val for_all : (key -> 'a -> bool) -> 'a t -> bool
-
   val exists : (key -> 'a -> bool) -> 'a t -> bool
-
   val partition : (key -> 'a -> bool) -> 'a t -> 'a t * 'a t
-
   val intersecti : (key -> 'a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
-
   val intersect : ('a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
 
   val merge :
@@ -114,7 +73,6 @@ module type S = sig
   module Import : sig
     module type FOLDABLE = sig
       type key
-
       type 'a t
 
       val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
@@ -122,32 +80,25 @@ module type S = sig
 
     module Make (M : FOLDABLE with type key = key) : sig
       val add_from : 'a M.t -> 'a t -> 'a t
-
       val from : 'a M.t -> 'a t
     end
 
     module AssocList : sig
       val add_from : (key * 'a) list -> 'a t -> 'a t
-
       val from : (key * 'a) list -> 'a t
     end
   end
 
   module ExceptionLess : sig
     val extract : key -> 'a t -> 'a option * 'a t
-
     val alter : key -> ('a -> 'a option) -> 'a t -> 'a t
-
     val modify : key -> ('a -> 'a) -> 'a t -> 'a t
-
     val find : key -> 'a t -> 'a option
-
     val choose : 'a t -> (key * 'a) option
   end
 
   module Infix : sig
     val ( --> ) : 'a t -> key -> 'a
-
     val ( <-- ) : 'a t -> key * 'a -> 'a t
   end
 end
@@ -174,11 +125,8 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | ArrayNode of int * 'a t array
 
   let empty = Empty
-
   let leaf h k v = Leaf (h, k, v)
-
   let singleton k v = Leaf (hash k, k, v)
-
   let is_empty x = x = Empty
 
   let rec cardinal = function
@@ -197,7 +145,6 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | _ -> false
 
   let hash_fragment shift h = (h asr shift) land mask
-
   let option default f = function None -> default | Some x -> f x
 
   let remove tab ix =
@@ -381,7 +328,6 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         ArrayNode (nb_children, Array.map copy children)
 
   let update key update hamt = alter_node 0 (hash key) key update hamt
-
   let add k v hamt = update k (fun _ -> Some v) hamt
 
   let add_mute k v hamt =
@@ -467,13 +413,9 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         else ArrayNode (nb_children, children)
 
   let map f hamt = alter_all (fun _k v -> Some (f v)) hamt
-
   let filter f hamt = alter_all (fun k v -> if f k v then Some v else None) hamt
-
   let filterv f hamt = alter_all (fun _k v -> if f v then Some v else None) hamt
-
   let filter_map f hamt = alter_all f hamt
-
   let mapi f hamt = alter_all (fun k v -> Some (f k v)) hamt
 
   let rec iter f = function
@@ -521,7 +463,6 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | ArrayNode (_, children) -> Array.fold_right (fold f) children v0
 
   let foldv f hamt v0 = fold (fun _k v acc -> f v acc) hamt v0
-
   let bindings hamt = fold (fun k v acc -> (k, v) :: acc) hamt []
 
   let to_seq =
@@ -550,7 +491,6 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     fun seq -> loop seq empty
 
   let keys hamt = fold (fun k _v acc -> k :: acc) hamt []
-
   let values hamt = fold (fun _k v acc -> v :: acc) hamt []
 
   let for_all f hamt =
@@ -649,7 +589,6 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | _, _ -> intersect_node shift (fun k x y -> f k y x) t2 t1
 
   let intersecti f t1 t2 = intersect_node 0 f t1 t2
-
   let intersect f t1 t2 = intersecti (fun _ v -> f v) t1 t2
 
   let rec merge_array :
@@ -731,7 +670,6 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
   module Import = struct
     module type FOLDABLE = sig
       type key
-
       type 'v t
 
       val fold : (key -> 'v -> 'a -> 'a) -> 'v t -> 'a -> 'a
@@ -739,7 +677,6 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
     module Make (M : FOLDABLE with type key = key) = struct
       let add_from x hamt = M.fold add_mute x (copy hamt)
-
       let from x = add_from x Empty
     end
 
@@ -759,17 +696,13 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
       with Not_found -> (None, hamt)
 
     let alter k f hamt = try alter k f hamt with Not_found -> hamt
-
     let modify k f hamt = try modify k f hamt with Not_found -> hamt
-
     let find k hamt = try Some (find k hamt) with Not_found -> None
-
     let choose hamt = try Some (choose hamt) with Not_found -> None
   end
 
   module Infix = struct
     let ( --> ) hamt k = find k hamt
-
     let ( <-- ) hamt (k, v) = add k v hamt
   end
 end
