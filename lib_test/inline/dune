@@ -1,0 +1,6 @@
+(library
+ (name hamt_tests)
+ (libraries hamt)
+ (modules hamt_tests)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
