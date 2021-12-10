@@ -17,6 +17,7 @@ depends: [
   "dune" {>= "2.9"}
   "stdlib-shims"
   "ocaml" {>= "4.05.0"}
+  "ppx_expect" {with-test}
   "core" {with-test & >= "v0.11"}
   "core_bench" {with-test & >= "v0.11"}
   "odoc" {with-doc}
