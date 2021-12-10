@@ -14,7 +14,7 @@
   (name hamt)
   (depends
     stdlib-shims
-    (ocaml (>= 4.02.3))
+    (ocaml (>= 4.05.0))
     (core (and :with-test (>= v0.11)))
     (core_bench (and :with-test (>= v0.11))))
   (synopsis "Hash Array Mapped Tries")
