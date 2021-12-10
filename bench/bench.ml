@@ -1,15 +1,10 @@
-open Core
 open Core_bench
 
 let max_rand = 1_000_000
 
 let () = Random.self_init ()
 
-module IntMap = Caml.Map.Make (struct
-  type t = int
-
-  let compare = compare
-end)
+module IntMap = Map.Make (Int)
 
 let rec fill n acc ~f =
   match n with
@@ -17,6 +12,7 @@ let rec fill n acc ~f =
   | _ -> fill (pred n) (f (Random.int max_rand) n acc) ~f
 
 let () =
+  let open Core in
   let args = [ 1; 10; 100; 1000; 10000 ] in
   Command.run
   @@ Bench.make_command
