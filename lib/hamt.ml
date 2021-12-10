@@ -533,16 +533,18 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         if f k v then (add k v yes, no) else (yes, add k v no))
       hamt (Empty, Empty)
 
-  let rec choose = function
-    | Empty -> raise Not_found
-    | Leaf (_, k, v) -> (k, v)
-    | HashCollision (_, li) -> List.hd li
-    | BitmapIndexedNode (_, base) -> choose base.(0)
-    | ArrayNode (_, children) ->
-        let rec loop n =
-          if children.(n) = Empty then loop (succ n) else children.(n)
-        in
-        choose (loop 0)
+  let choose =
+    let rec choose = function
+      | Empty -> raise Not_found
+      | Leaf (_, k, v) -> (k, v)
+      | HashCollision (_, li) -> List.hd li
+      | BitmapIndexedNode (_, base) -> choose base.(0)
+      | ArrayNode (_, children) -> choose (find_non_empty_child children 0)
+    and find_non_empty_child children n =
+      if is_empty children.(n) then find_non_empty_child children (succ n)
+      else children.(n)
+    in
+    choose
 
   let pop hamt =
     let k, v = choose hamt in
