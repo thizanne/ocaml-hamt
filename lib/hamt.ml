@@ -30,7 +30,7 @@ end = struct
     let mask = pred (1 lsl sub_hash) in
     ctpop (bitmap land mask)
 
-  let bitmap_to_indices bitmap =
+  let bitmap_to_indices =
     let rec loop ix bitmap =
       if bitmap = 0 then []
       else if ix = 32 then []
@@ -38,7 +38,7 @@ end = struct
         let r = loop (succ ix) (bitmap asr 1) in
         if bitmap land 1 = 0 then r else ix :: r
     in
-    loop 0 bitmap
+    fun bitmap -> loop 0 bitmap
 
   let indices_to_bitmap = List.fold_left (fun x i -> x lor (1 lsl i)) 0
   let nth_bit_set bitmap n = (bitmap asr n) land 1 = 1
@@ -191,7 +191,6 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | _ -> false
 
   let hash_fragment shift h = (h asr shift) land mask
-  let option default f = function None -> default | Some x -> f x
 
   let remove tab ix =
     let tab' = Array.make (Array.length tab - 1) Empty in
@@ -231,36 +230,43 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | HashCollision (_, _), Leaf (_, _, _) -> combine_tip shift node2 node1
     | _ -> failwith "combine_tip"
 
-  let rec update_list update k = function
-    | [] -> option [] (fun v -> [ (k, v) ]) (update None)
-    | ((kx, vx) as x) :: xs ->
-        if kx = k then option xs (fun v -> (k, v) :: xs) (update (Some vx))
-        else x :: update_list update k xs
+  let update_list =
+    let rec loop update k = function
+      | [] -> ( match update None with None -> [] | Some v -> [ (k, v) ])
+      | ((kx, vx) as x) :: xs ->
+          if kx = k then
+            match update (Some vx) with None -> xs | Some v -> (k, v) :: xs
+          else x :: loop update k xs
+    in
+    fun update k xs -> loop update k xs
 
-  let expand_bitmap_node sub_hash node bitmap sub_nodes =
-    let tab = Array.make chunk Empty in
-    let rec fill ix jx bitmap =
+  let expand_bitmap_node =
+    let rec fill tab sub_nodes ix jx bitmap =
       if ix = chunk then jx
-      else if bitmap land 1 = 0 then fill (succ ix) jx (bitmap asr 1)
+      else if bitmap land 1 = 0 then
+        fill tab sub_nodes (succ ix) jx (bitmap asr 1)
       else (
         tab.(ix) <- sub_nodes.(jx);
-        fill (succ ix) (succ jx) (bitmap asr 1))
+        fill tab sub_nodes (succ ix) (succ jx) (bitmap asr 1))
     in
-    let n = fill 0 0 bitmap in
-    tab.(sub_hash) <- node;
-    ArrayNode (n, tab)
+    fun sub_hash node bitmap sub_nodes ->
+      let tab = Array.make chunk Empty in
+      let n = fill tab sub_nodes 0 0 bitmap in
+      tab.(sub_hash) <- node;
+      ArrayNode (n, tab)
 
-  let pack_array_node to_remove nb_children children =
-    let base = Array.make nb_children Empty in
-    let rec loop ix jx bitmap =
+  let pack_array_node =
+    let rec loop children to_remove base ix jx bitmap =
       if ix = chunk then BitmapIndexedNode (bitmap, base)
       else if children.(ix) = Empty || to_remove ix then
-        loop (succ ix) jx bitmap
+        loop children to_remove base (succ ix) jx bitmap
       else (
         base.(jx) <- children.(ix);
-        loop (succ ix) (succ jx) (bitmap lor (1 lsl ix)))
+        loop children to_remove base (succ ix) (succ jx) (bitmap lor (1 lsl ix)))
     in
-    loop 0 0 0
+    fun to_remove nb_children children ->
+      let base = Array.make nb_children Empty in
+      loop children to_remove base 0 0 0
 
   let rec reify_node = function
     | Empty -> Empty
@@ -295,14 +301,16 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     else Modified
 
   let rec alter_node ?(mute = false) shift hash key update = function
-    | Empty -> option Empty (leaf hash key) (update None)
-    | Leaf (h, k, v) as leaf1 ->
-        if k = key then option Empty (leaf h k) (update (Some v))
+    | Empty -> (
+        match update None with None -> Empty | Some s -> leaf hash key s)
+    | Leaf (h, k, v) as leaf1 -> (
+        if k = key then
+          match update (Some v) with None -> Empty | Some s -> leaf h k s
         else
-          option leaf1
-            (fun x -> combine_tip shift leaf1 (Leaf (hash, key, x)))
-            (update None)
-    | HashCollision (h, pairs) as hash_collision ->
+          match update None with
+          | None -> leaf1
+          | Some x -> combine_tip shift leaf1 (Leaf (hash, key, x)))
+    | HashCollision (h, pairs) as hash_collision -> (
         if hash = h then
           let pairs = update_list update key pairs in
           match pairs with
@@ -310,9 +318,9 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
           | [ (k, v) ] -> leaf h k v
           | _ -> HashCollision (h, pairs)
         else
-          option hash_collision
-            (fun x -> combine_tip shift (Leaf (hash, key, x)) hash_collision)
-            (update None)
+          match update None with
+          | None -> hash_collision
+          | Some x -> combine_tip shift (Leaf (hash, key, x)) hash_collision)
     | BitmapIndexedNode (bitmap, base) as bm_node -> (
         let sub_hash = hash_fragment shift hash in
         let ix = from_bitmap bitmap sub_hash in
@@ -435,7 +443,8 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
   and alter_all f = function
     | Empty -> Empty
-    | Leaf (h, k, v) -> option Empty (leaf h k) (f k v)
+    | Leaf (h, k, v) -> (
+        match f k v with None -> Empty | Some x -> leaf h k x)
     | HashCollision (h, pairs) -> (
         match alter_hc f pairs with
         | [] -> Empty
@@ -471,7 +480,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | BitmapIndexedNode (_, base) -> Array.iter (iter f) base
     | ArrayNode (_, children) -> Array.iter (iter f) children
 
-  let find key =
+  let find =
     let rec find shift hash key = function
       | Empty -> raise Not_found
       | Leaf (_, k, v) -> if k = key then v else raise Not_found
@@ -488,7 +497,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
           if child = Empty then raise Not_found
           else find (shift + shift_step) hash key child
     in
-    find 0 (hash key) key
+    fun key -> find 0 (hash key) key
 
   let find_opt key t =
     match find key t with e -> Some e | exception Not_found -> None
