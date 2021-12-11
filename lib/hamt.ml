@@ -421,17 +421,17 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         | None -> alter_hc f xs
         | Some w -> (k, w) :: alter_hc f xs)
 
-  and alter_bmnode f indices base =
-    let rec aux n = function
+  and alter_bmnode =
+    let rec aux f base n = function
       | [] -> ([], [])
       | i :: is -> (
           match alter_all f base.(n) with
-          | Empty -> aux (succ n) is
+          | Empty -> aux f base (succ n) is
           | x ->
-              let iss, bss = aux (succ n) is in
+              let iss, bss = aux f base (succ n) is in
               (i :: iss, x :: bss))
     in
-    aux 0 indices
+    fun f indices base -> aux f base 0 indices
 
   and alter_all f = function
     | Empty -> Empty
