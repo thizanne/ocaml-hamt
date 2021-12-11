@@ -173,7 +173,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
   let empty = Empty
   let leaf h k v = Leaf (h, k, v)
   let singleton k v = Leaf (hash k, k, v)
-  let is_empty x = x = Empty
+  let is_empty = function Empty -> true | _ -> false
 
   let rec cardinal = function
     | Empty -> 0
@@ -210,9 +210,11 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     tab'.(ix) <- v;
     tab'
 
+  let int_equal (x : int) (y : int) = x = y
+
   let rec combine_tip shift node1 node2 =
     match (node1, node2) with
-    | Leaf (h1, k1, v1), Leaf (h2, k2, v2) when h1 = h2 ->
+    | Leaf (h1, k1, v1), Leaf (h2, k2, v2) when int_equal h1 h2 ->
         HashCollision (h1, [ (k1, v1); (k2, v2) ])
     | Leaf (h1, _, _), Leaf (h2, _, _) | Leaf (h1, _, _), HashCollision (h2, _)
       ->
@@ -224,7 +226,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         let bitmap = (1 lsl sub_h1) lor (1 lsl sub_h2) in
         BitmapIndexedNode
           ( bitmap,
-            if sub_h1 = sub_h2 then
+            if int_equal sub_h1 sub_h2 then
               [| combine_tip (shift + shift_step) node1 node2 |]
             else [| nodeA; nodeB |] )
     | HashCollision (_, _), Leaf (_, _, _) -> combine_tip shift node2 node1
@@ -234,7 +236,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     let rec loop update k = function
       | [] -> ( match update None with None -> [] | Some v -> [ (k, v) ])
       | ((kx, vx) as x) :: xs ->
-          if kx = k then
+          if Key.equal kx k then
             match update (Some vx) with None -> xs | Some v -> (k, v) :: xs
           else x :: loop update k xs
     in
@@ -242,8 +244,8 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
   let expand_bitmap_node =
     let rec fill tab sub_nodes ix jx bitmap =
-      if ix = chunk then jx
-      else if bitmap land 1 = 0 then
+      if int_equal ix chunk then jx
+      else if int_equal (bitmap land 1) 0 then
         fill tab sub_nodes (succ ix) jx (bitmap asr 1)
       else (
         tab.(ix) <- sub_nodes.(jx);
@@ -257,8 +259,8 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
   let pack_array_node =
     let rec loop children to_remove base ix jx bitmap =
-      if ix = chunk then BitmapIndexedNode (bitmap, base)
-      else if children.(ix) = Empty || to_remove ix then
+      if int_equal ix chunk then BitmapIndexedNode (bitmap, base)
+      else if is_empty children.(ix) || to_remove ix then
         loop children to_remove base (succ ix) jx bitmap
       else (
         base.(jx) <- children.(ix);
@@ -275,8 +277,9 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | HashCollision (h, [ (k, v) ]) -> Leaf (h, k, v)
     | HashCollision (h, li) -> HashCollision (h, li)
     | BitmapIndexedNode (bitmap, base) ->
-        if Array.length base = 0 then Empty
-        else if Array.length base = 1 && is_tip_node base.(0) then base.(0)
+        if int_equal (Array.length base) 0 then Empty
+        else if int_equal (Array.length base) 1 && is_tip_node base.(0) then
+          base.(0)
         else if Array.length base > bmnode_max then failwith "reify_node"
         else BitmapIndexedNode (bitmap, base)
     | ArrayNode (nb_children, children) ->
@@ -304,14 +307,14 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | Empty -> (
         match update None with None -> Empty | Some s -> leaf hash key s)
     | Leaf (h, k, v) as leaf1 -> (
-        if k = key then
+        if Key.equal k key then
           match update (Some v) with None -> Empty | Some s -> leaf h k s
         else
           match update None with
           | None -> leaf1
           | Some x -> combine_tip shift leaf1 (Leaf (hash, key, x)))
     | HashCollision (h, pairs) as hash_collision -> (
-        if hash = h then
+        if int_equal hash h then
           let pairs = update_list update key pairs in
           match pairs with
           | [] -> failwith "alter_node" (* Should never happen *)
@@ -325,12 +328,12 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         let sub_hash = hash_fragment shift hash in
         let ix = from_bitmap bitmap sub_hash in
         let bit = 1 lsl sub_hash in
-        let not_exists = bitmap land bit = 0 in
+        let not_exists = int_equal (bitmap land bit) 0 in
         let child = if not_exists then Empty else base.(ix) in
         let child =
           alter_node ~mute (shift + shift_step) hash key update child
         in
-        match change not_exists (child = Empty) with
+        match change not_exists (is_empty child) with
         | Nil -> bm_node
         | Modified ->
             if mute then (
@@ -339,12 +342,13 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
             else BitmapIndexedNode (bitmap, set_tab base ix child)
         | Removed ->
             let bitmap = bitmap land lnot bit in
-            if bitmap = 0 then Empty
-            else if Array.length base = 2 && is_tip_node base.(ix lxor 1) then
-              base.(ix lxor 1)
+            if int_equal bitmap 0 then Empty
+            else if
+              int_equal (Array.length base) 2 && is_tip_node base.(ix lxor 1)
+            then base.(ix lxor 1)
             else BitmapIndexedNode (bitmap, remove base ix)
         | Added ->
-            if Array.length base = bmnode_max then
+            if int_equal (Array.length base) bmnode_max then
               expand_bitmap_node sub_hash child bitmap base
             else BitmapIndexedNode (bitmap lor bit, add_tab base ix child))
     | ArrayNode (nb_children, children) as arr_node -> (
@@ -353,7 +357,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         let child' =
           alter_node ~mute (shift + shift_step) hash key update child
         in
-        match change (child = Empty) (child' = Empty) with
+        match change (is_empty child) (is_empty child') with
         | Nil -> arr_node
         | Added ->
             if mute then (
@@ -366,8 +370,8 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
               arr_node)
             else ArrayNode (nb_children, set_tab children sub_hash child')
         | Removed ->
-            if nb_children = arrnode_min then
-              pack_array_node (( = ) sub_hash) nb_children children
+            if int_equal nb_children arrnode_min then
+              pack_array_node (int_equal sub_hash) nb_children children
             else if mute then (
               children.(sub_hash) <- Empty;
               ArrayNode (pred nb_children, children))
@@ -460,7 +464,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         let children = Array.map (alter_all f) children in
         let nb_children =
           Array.fold_left
-            (fun n v -> if v = Empty then n else succ n)
+            (fun n v -> if is_empty v then n else succ n)
             0 children
         in
         if nb_children < arrnode_min then
@@ -480,21 +484,25 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | BitmapIndexedNode (_, base) -> Array.iter (iter f) base
     | ArrayNode (_, children) -> Array.iter (iter f) children
 
+  let rec assoc k = function
+    | [] -> raise Not_found
+    | (k', v) :: xs -> if Key.equal k k' then v else assoc k xs
+
   let find =
     let rec find shift hash key = function
       | Empty -> raise Not_found
-      | Leaf (_, k, v) -> if k = key then v else raise Not_found
-      | HashCollision (_, pairs) -> List.assoc key pairs
+      | Leaf (_, k, v) -> if Key.equal k key then v else raise Not_found
+      | HashCollision (_, pairs) -> assoc key pairs
       | BitmapIndexedNode (bitmap, base) ->
           let sub_hash = hash_fragment shift hash in
           let bit = 1 lsl sub_hash in
-          if bitmap land bit = 0 then raise Not_found
+          if int_equal (bitmap land bit) 0 then raise Not_found
           else
             find (shift + shift_step) hash key
               base.(from_bitmap bitmap sub_hash)
       | ArrayNode (_, children) ->
           let child = children.(hash_fragment shift hash) in
-          if child = Empty then raise Not_found
+          if is_empty child then raise Not_found
           else find (shift + shift_step) hash key child
     in
     fun key -> find 0 (hash key) key
@@ -612,12 +620,11 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
                ( h1,
                  List.fold_left
                    (fun acc (k, v) ->
-                     try (k, f k v (List.assoc k li2)) :: acc
-                     with Not_found -> acc)
+                     try (k, f k v (assoc k li2)) :: acc with Not_found -> acc)
                    [] li1 ))
     | HashCollision (h, _li), BitmapIndexedNode (bitmap, base) ->
         let bit = 1 lsl hash_fragment shift h in
-        if bitmap land bit = 0 then Empty
+        if int_equal (bitmap land bit) 0 then Empty
         else
           let n = ctpop (bitmap land pred bit) in
           let node = intersect_node (shift + shift_step) f t1 base.(n) in
@@ -630,7 +637,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         reify_node (BitmapIndexedNode (1 lsl fragment, [| child |]))
     | BitmapIndexedNode (bitmap1, base1), BitmapIndexedNode (bitmap2, base2) ->
         let bitmap = bitmap1 land bitmap2 in
-        if bitmap = 0 then Empty
+        if int_equal bitmap 0 then Empty
         else
           intersect_array (shift + shift_step) f
             (bitmap_to_array bitmap1 base1)
@@ -677,7 +684,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         let t2 =
           alter_all
             (fun k' v' ->
-              if k' = k then (
+              if Key.equal k' k then (
                 flag := true;
                 f k (Some v) (Some v'))
               else f k' None (Some v'))
@@ -691,7 +698,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
           alter_all
             (fun k' v' ->
               try
-                let v = List.assoc k' li in
+                let v = assoc k' li in
                 absents := List.remove_assoc k' !absents;
                 f k' (Some v) (Some v')
               with Not_found -> f k' None (Some v'))
