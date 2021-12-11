@@ -65,4 +65,10 @@ let () =
              let map = fill i Hamt.Int.empty ~f:Hamt.Int.add in
              let f i = Hamt.Int.mem i map in
              Staged.stage @@ fun () -> mem_all i ~f);
+         Bench.Test.create_indexed ~name:"IntMap.map" ~args (fun i ->
+             let map = fill i IntMap.empty ~f:IntMap.add in
+             Staged.stage @@ fun () -> IntMap.map (fun _ -> ()) map);
+         Bench.Test.create_indexed ~name:"Hamt.Int.map" ~args (fun i ->
+             let map = fill i Hamt.Int.empty ~f:Hamt.Int.add in
+             Staged.stage @@ fun () -> Hamt.Int.map (fun _ -> ()) map);
        ]
