@@ -284,7 +284,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
               bm_node)
             else BitmapIndexedNode (bitmap, set_tab base ix child)
         | Removed ->
-            let bitmap = bitmap land lnot bit land mask in
+            let bitmap = bitmap land lnot bit in
             if bitmap = 0 then Empty
             else if Array.length base = 2 && is_tip_node base.(ix lxor 1) then
               base.(ix lxor 1)

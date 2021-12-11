@@ -39,7 +39,7 @@ let%expect_test "remove" =
   [%expect {| [3 = "three";4 = "four";1 = "one"] |}];
   let map = Int_map.remove 1 map in
   print_str map;
-  [%expect {| [] |}];
+  [%expect {| [3 = "three";4 = "four"] |}];
   let map = Int_map.remove 10 map in
   print_str map;
-  [%expect {| [] |}]
+  [%expect {| [3 = "three";4 = "four"] |}]
