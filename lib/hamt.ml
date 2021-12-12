@@ -19,14 +19,14 @@ end = struct
   let sk3 = 0x33333333
   let skf0 = 0xf0f0f0f
 
-  let ctpop map =
+  let[@inline always] ctpop map =
     let map = map - ((map lsr 1) land sk5) in
     let map = (map land sk3) + ((map lsr 2) land sk3) in
     let map = (map land skf0) + ((map lsr 4) land skf0) in
     let map = map + (map lsr 8) in
     (map + (map lsr 16)) land 0x3f
 
-  let from_bitmap bitmap sub_hash =
+  let[@inline always] from_bitmap bitmap sub_hash =
     let mask = pred (1 lsl sub_hash) in
     ctpop (bitmap land mask)
 
@@ -40,8 +40,10 @@ end = struct
     in
     fun bitmap -> loop 0 bitmap
 
-  let indices_to_bitmap = List.fold_left (fun x i -> x lor (1 lsl i)) 0
-  let nth_bit_set bitmap n = (bitmap asr n) land 1 = 1
+  let[@inline always] indices_to_bitmap l =
+    List.fold_left (fun x i -> x lor (1 lsl i)) 0 l
+
+  let[@inline always] nth_bit_set bitmap n = (bitmap asr n) land 1 = 1
 end
 
 open BitUtils
@@ -171,9 +173,9 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | ArrayNode of int * 'a t array
 
   let empty = Empty
-  let leaf h k v = Leaf (h, k, v)
-  let singleton k v = Leaf (hash k, k, v)
-  let is_empty = function Empty -> true | _ -> false
+  let[@inline always] leaf h k v = Leaf (h, k, v)
+  let[@inline always] singleton k v = Leaf (hash k, k, v)
+  let[@inline always] is_empty = function Empty -> true | _ -> false
 
   let rec cardinal = function
     | Empty -> 0
@@ -186,11 +188,11 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
   let length = cardinal
 
-  let is_tip_node = function
+  let[@inline always] is_tip_node = function
     | Empty | Leaf (_, _, _) | HashCollision (_, _) -> true
     | _ -> false
 
-  let hash_fragment shift h = (h asr shift) land mask
+  let[@inline always] hash_fragment shift h = (h asr shift) land mask
 
   let remove tab ix =
     let tab' = Array.make (Array.length tab - 1) Empty in
@@ -295,7 +297,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
   type change = Nil | Added | Modified | Removed
 
-  let change old_is_empty new_is_empty =
+  let[@inline always] change old_is_empty new_is_empty =
     if old_is_empty then if new_is_empty then Nil else Added
     else if new_is_empty then Removed
     else Modified
