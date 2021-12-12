@@ -487,7 +487,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | (k', v) :: xs -> if Key.equal k k' then v else assoc k xs
 
   let rec assoc_notrace k = function
-    | [] -> raise Not_found
+    | [] -> raise_notrace Not_found
     | (k', v) :: xs -> if Key.equal k k' then v else assoc_notrace k xs
 
   module Notrace = struct
