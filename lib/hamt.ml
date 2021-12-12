@@ -491,12 +491,14 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
       | Leaf (_, k, v) -> if Key.equal k key then v else raise Not_found
       | HashCollision (_, pairs) -> assoc key pairs
       | BitmapIndexedNode (bitmap, base) ->
-          let sub_hash = hash_fragment shift hash in
-          let bit = 1 lsl sub_hash in
+          let bit =
+            let sub_hash = hash_fragment shift hash in
+            1 lsl sub_hash
+          in
           if int_equal (bitmap land bit) 0 then raise Not_found
           else
-            find (shift + shift_step) hash key
-              base.(from_bitmap bitmap sub_hash)
+            let idx = ctpop (bitmap land pred bit) in
+            find (shift + shift_step) hash key base.(idx)
       | ArrayNode (_, children) ->
           let child = children.(hash_fragment shift hash) in
           if is_empty child then raise Not_found
