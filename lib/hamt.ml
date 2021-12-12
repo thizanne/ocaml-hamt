@@ -232,15 +232,12 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | HashCollision (_, _), Leaf (_, _, _) -> combine_tip shift node2 node1
     | _ -> failwith "combine_tip"
 
-  let update_list =
-    let rec loop update k = function
-      | [] -> ( match update None with None -> [] | Some v -> [ (k, v) ])
-      | ((kx, vx) as x) :: xs ->
-          if Key.equal kx k then
-            match update (Some vx) with None -> xs | Some v -> (k, v) :: xs
-          else x :: loop update k xs
-    in
-    fun update k xs -> loop update k xs
+  let rec update_list update k = function
+    | [] -> ( match update None with None -> [] | Some v -> [ (k, v) ])
+    | ((kx, vx) as x) :: xs ->
+        if Key.equal kx k then
+          match update (Some vx) with None -> xs | Some v -> (k, v) :: xs
+        else x :: update_list update k xs
 
   let expand_bitmap_node =
     let rec fill tab sub_nodes ix jx bitmap =
