@@ -34,9 +34,8 @@ end = struct
     let rec loop ix bitmap =
       if bitmap = 0 then []
       else if ix = 32 then []
-      else
-        let r = loop (succ ix) (bitmap asr 1) in
-        if bitmap land 1 = 0 then r else ix :: r
+      else if bitmap land 1 = 0 then loop (succ ix) (bitmap asr 1)
+      else ix :: loop (succ ix) (bitmap asr 1)
     in
     fun bitmap -> loop 0 bitmap
 
