@@ -486,33 +486,45 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | [] -> raise Not_found
     | (k', v) :: xs -> if Key.equal k k' then v else assoc k xs
 
-  let find =
-    let rec find shift hash key = function
-      | Empty -> raise Not_found
-      | Leaf (_, k, v) -> if Key.equal k key then v else raise Not_found
-      | HashCollision (_, pairs) -> assoc key pairs
-      | BitmapIndexedNode (bitmap, base) ->
-          let bit =
-            let sub_hash = hash_fragment shift hash in
-            1 lsl sub_hash
-          in
-          if int_equal (bitmap land bit) 0 then raise Not_found
-          else
-            let idx = ctpop (bitmap land pred bit) in
-            find (shift + shift_step) hash key base.(idx)
-      | ArrayNode (_, children) ->
-          let child = children.(hash_fragment shift hash) in
-          if is_empty child then raise Not_found
-          else find (shift + shift_step) hash key child
-    in
-    fun key -> find 0 (hash key) key
+  let rec assoc_notrace k = function
+    | [] -> raise Not_found
+    | (k', v) :: xs -> if Key.equal k k' then v else assoc_notrace k xs
+
+  module Notrace = struct
+    let find =
+      let rec find shift hash key = function
+        | Empty -> raise_notrace Not_found
+        | Leaf (_, k, v) ->
+            if Key.equal k key then v else raise_notrace Not_found
+        | HashCollision (_, pairs) -> assoc_notrace key pairs
+        | BitmapIndexedNode (bitmap, base) ->
+            let bit =
+              let sub_hash = hash_fragment shift hash in
+              1 lsl sub_hash
+            in
+            if int_equal (bitmap land bit) 0 then raise_notrace Not_found
+            else
+              let idx = ctpop (bitmap land pred bit) in
+              find (shift + shift_step) hash key base.(idx)
+        | ArrayNode (_, children) ->
+            let child = children.(hash_fragment shift hash) in
+            if is_empty child then raise_notrace Not_found
+            else find (shift + shift_step) hash key child
+      in
+      fun key -> find 0 (hash key) key
+  end
+
+  let find key t =
+    match Notrace.find key t with
+    | x -> x
+    | exception Not_found -> raise Not_found
 
   let find_opt key t =
-    match find key t with e -> Some e | exception Not_found -> None
+    match Notrace.find key t with e -> Some e | exception Not_found -> None
 
   let mem key hamt =
     try
-      let _ = find key hamt in
+      let _ = Notrace.find key hamt in
       true
     with Not_found -> false
 
@@ -611,7 +623,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     match (t1, t2) with
     | Empty, _ -> Empty
     | Leaf (h, k, v), _ -> (
-        try Leaf (h, k, f k v (find k t2)) with Not_found -> Empty)
+        try Leaf (h, k, f k v (Notrace.find k t2)) with Not_found -> Empty)
     | HashCollision (h1, li1), HashCollision (h2, li2) ->
         if h1 <> h2 then Empty
         else
@@ -759,7 +771,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
     let alter k f hamt = try alter k f hamt with Not_found -> hamt
     let modify k f hamt = try modify k f hamt with Not_found -> hamt
-    let find k hamt = try Some (find k hamt) with Not_found -> None
+    let find k hamt = find_opt k hamt
     let choose hamt = try Some (choose hamt) with Not_found -> None
   end
 
