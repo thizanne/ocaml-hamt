@@ -20,6 +20,7 @@ depends: [
   "ppx_expect" {with-test}
   "core" {with-test & >= "v0.11"}
   "core_bench" {with-test & >= "v0.11"}
+  "seq"
   "odoc" {with-doc}
 ]
 build: [
