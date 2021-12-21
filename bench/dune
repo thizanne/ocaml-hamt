@@ -1,3 +1,5 @@
 (executable
  (name bench)
+ (public_name hamt-bench)
+ (package hamt-bench)
  (libraries hamt core core_bench))
