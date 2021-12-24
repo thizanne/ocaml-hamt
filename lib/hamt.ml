@@ -551,26 +551,29 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
   module Notrace = struct
     let find =
-      let rec find shift hash key = function
+      let rec find hash key = function
         | Empty -> raise_notrace Not_found
         | Leaf (_, k, v) ->
             if Key.equal k key then v else raise_notrace Not_found
         | HashCollision (_, pairs) -> assoc_notrace key pairs
         | BitmapIndexedNode (bitmap, base) ->
             let bit =
-              let sub_hash = hash_fragment shift hash in
+              let sub_hash = hash land mask in
               1 lsl sub_hash
             in
             if Int_shims.equal (bitmap land bit) 0 then raise_notrace Not_found
             else
-              let idx = ctpop (bitmap land pred bit) in
-              find (shift + shift_step) hash key base.(idx)
+              let node =
+                let idx = ctpop (bitmap land pred bit) in
+                base.(idx)
+              in
+              find (hash lsr shift_step) key node
         | ArrayNode (_, children) ->
-            let child = children.(hash_fragment shift hash) in
+            let child = children.(hash land mask) in
             if is_empty child then raise_notrace Not_found
-            else find (shift + shift_step) hash key child
+            else find (hash lsr shift_step) key child
       in
-      fun key -> find 0 (hash key) key
+      fun key -> find (hash key) key
   end
 
   let find key t =
