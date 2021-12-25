@@ -1,10 +1,8 @@
 module Shims = struct
-
   (* Each function in this module should be documented with the OCaml
-   version that introduced it, so we can clean this when we drop
-   support for older versions.
-   *)
-
+     version that introduced it, so we can clean this when we drop
+     support for older versions.
+  *)
 
   module Int_shims = struct
     let equal (x : int) (y : int) =
@@ -26,7 +24,6 @@ module Shims = struct
       match seq () with
       | Seq.Nil -> Seq.Nil
       | Cons (x, next) -> append (f x) (flat_map f next) ()
-
   end
 
   module List_shims = struct
@@ -34,9 +31,8 @@ module Shims = struct
 
     let to_seq list =
       (* 4.07 *)
-      let rec aux l () = match l with
-        | [] -> Seq.Nil
-        | x :: tail -> Seq.Cons (x, aux tail)
+      let rec aux l () =
+        match l with [] -> Seq.Nil | x :: tail -> Seq.Cons (x, aux tail)
       in
       aux list
   end
@@ -47,8 +43,7 @@ module Shims = struct
     let to_seq a =
       (* 4.07 *)
       let rec aux i () =
-        if i < Array.length a
-        then
+        if i < Array.length a then
           let x = Array.unsafe_get a i in
           Seq.Cons (x, aux (i + 1))
         else Seq.Nil
@@ -335,8 +330,8 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     | HashCollision (h, li) -> HashCollision (h, li)
     | BitmapIndexedNode (bitmap, base) ->
         if Int_shims.equal (Array.length base) 0 then Empty
-        else if Int_shims.equal (Array.length base) 1 && is_tip_node base.(0) then
-          base.(0)
+        else if Int_shims.equal (Array.length base) 1 && is_tip_node base.(0)
+        then base.(0)
         else if Array.length base > bmnode_max then failwith "reify_node"
         else BitmapIndexedNode (bitmap, base)
     | ArrayNode (nb_children, children) ->
@@ -401,7 +396,8 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
             let bitmap = bitmap land lnot bit in
             if Int_shims.equal bitmap 0 then Empty
             else if
-              Int_shims.equal (Array.length base) 2 && is_tip_node base.(ix lxor 1)
+              Int_shims.equal (Array.length base) 2
+              && is_tip_node base.(ix lxor 1)
             then base.(ix lxor 1)
             else BitmapIndexedNode (bitmap, remove base ix)
         | Added ->
@@ -853,6 +849,5 @@ module Int = Make' (struct
   type t = int
 
   let equal = Int_shims.equal
-
   let hash = Hashtbl.hash
 end)
