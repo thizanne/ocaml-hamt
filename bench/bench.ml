@@ -71,4 +71,10 @@ let () =
          Bench.Test.create_indexed ~name:"Hamt.Int.map" ~args (fun i ->
              let map = fill i Hamt.Int.empty ~f:Hamt.Int.add in
              Staged.stage @@ fun () -> Hamt.Int.map (fun _ -> ()) map);
+         Bench.Test.create_indexed ~name:"IntMap.iter" ~args (fun i ->
+             let map = fill i IntMap.empty ~f:IntMap.add in
+             Staged.stage @@ fun () -> IntMap.iter (fun _ _ -> ()) map);
+         Bench.Test.create_indexed ~name:"Hamt.Int.iter" ~args (fun i ->
+             let map = fill i Hamt.Int.empty ~f:Hamt.Int.add in
+             Staged.stage @@ fun () -> Hamt.Int.iter (fun _ _ -> ()) map);
        ]
