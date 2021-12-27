@@ -581,10 +581,7 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     match Notrace.find key t with e -> Some e | exception Not_found -> None
 
   let mem key hamt =
-    try
-      let _ = Notrace.find key hamt in
-      true
-    with Not_found -> false
+    match Notrace.find key hamt with _ -> true | exception Not_found -> false
 
   let rec fold f hamt v0 =
     match hamt with
@@ -679,7 +676,9 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     match (t1, t2) with
     | Empty, _ -> Empty
     | Leaf (h, k, v), _ -> (
-        try Leaf (h, k, f k v (Notrace.find k t2)) with Not_found -> Empty)
+        match Notrace.find k t2 with
+        | exception Not_found -> Empty
+        | v' -> Leaf (h, k, f k v v'))
     | HashCollision (h1, li1), HashCollision (h2, li2) ->
         if h1 <> h2 then Empty
         else
@@ -688,7 +687,9 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
                ( h1,
                  List.fold_left
                    (fun acc (k, v) ->
-                     try (k, f k v (assoc k li2)) :: acc with Not_found -> acc)
+                     match assoc_notrace k li2 with
+                     | exception Not_found -> acc
+                     | v' -> (k, f k v v') :: acc)
                    [] li1 ))
     | HashCollision (h, _li), BitmapIndexedNode (bitmap, base) ->
         let bit = 1 lsl hash_fragment shift h in
@@ -765,11 +766,11 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
         let t2 =
           alter_all
             (fun k' v' ->
-              try
-                let v = assoc k' li in
-                absents := List.remove_assoc k' !absents;
-                f k' (Some v) (Some v')
-              with Not_found -> f k' None (Some v'))
+              match assoc k' li with
+              | exception Not_found -> f k' None (Some v')
+              | v ->
+                  absents := List.remove_assoc k' !absents;
+                  f k' (Some v) (Some v'))
             t2
         in
         List.fold_left
@@ -820,10 +821,9 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
 
   module ExceptionLess = struct
     let extract k hamt =
-      try
-        let v, r = extract k hamt in
-        (Some v, r)
-      with Not_found -> (None, hamt)
+      match extract k hamt with
+      | v, r -> (Some v, r)
+      | exception Not_found -> (None, hamt)
 
     let alter k f hamt = try alter k f hamt with Not_found -> hamt
     let modify k f hamt = try modify k f hamt with Not_found -> hamt

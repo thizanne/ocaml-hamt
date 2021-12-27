@@ -62,4 +62,4 @@ let%expect_test "intersect - Not_found" =
      ignore (Int_map.intersect (fun _ _ -> raise Not_found) map map);
      print_endline "[FAIL] swallowed Not_found"
    with Not_found -> print_endline "[PASS] caught Not_found");
-  [%expect {| [FAIL] swallowed Not_found |}]
+  [%expect {| [PASS] caught Not_found |}]
