@@ -44,18 +44,22 @@ let%expect_test "remove" =
   print_str map;
   [%expect {| [3 = "three";4 = "four"] |}]
 
+let map =
+  Int_map.Import.AssocList.from [ (1, "one"); (3, "three"); (4, "four") ]
+
 let%expect_test "map" =
-  let map =
-    Int_map.Import.AssocList.from [ (1, "one"); (3, "three"); (4, "four") ]
-  in
   let map = Int_map.map String.length map in
   print Format.pp_print_int map;
   [%expect {| [3 = 5;4 = 4;1 = 3] |}]
 
 let%expect_test "filter" =
-  let map =
-    Int_map.Import.AssocList.from [ (1, "one"); (3, "three"); (4, "four") ]
-  in
   let map = Int_map.filter (fun _ x -> String.length x > 3) map in
   print_str map;
   [%expect {| [3 = "three";4 = "four"] |}]
+
+let%expect_test "intersect - Not_found" =
+  (try
+     ignore (Int_map.intersect (fun _ _ -> raise Not_found) map map);
+     print_endline "[FAIL] swallowed Not_found"
+   with Not_found -> print_endline "[PASS] caught Not_found");
+  [%expect {| [FAIL] swallowed Not_found |}]
