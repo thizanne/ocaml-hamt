@@ -199,11 +199,6 @@ module type S = sig
     val find : key -> 'a t -> 'a option
     val choose : 'a t -> (key * 'a) option
   end
-
-  module Infix : sig
-    val ( --> ) : 'a t -> key -> 'a
-    val ( <-- ) : 'a t -> key * 'a -> 'a t
-  end
 end
 
 module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
@@ -829,11 +824,6 @@ module Make (Config : CONFIG) (Key : Hashtbl.HashedType) :
     let modify k f hamt = try modify k f hamt with Not_found -> hamt
     let find k hamt = find_opt k hamt
     let choose hamt = try Some (choose hamt) with Not_found -> None
-  end
-
-  module Infix = struct
-    let ( --> ) hamt k = find k hamt
-    let ( <-- ) hamt (k, v) = add k v hamt
   end
 end
 

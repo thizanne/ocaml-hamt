@@ -290,17 +290,6 @@ module type S = sig
     val find : key -> 'a t -> 'a option
     val choose : 'a t -> (key * 'a) option
   end
-
-  (** Infix operations. *)
-  module Infix : sig
-    val ( --> ) : 'a t -> key -> 'a
-    (** [t --> k] returns the current binding of [k] in [t], or
-        raises [Not_found]. Strictly equivalent to [find_exn k t]. *)
-
-    val ( <-- ) : 'a t -> key * 'a -> 'a t
-    (** [t <-- (k, v)] adds to [t] a binding from [k] to [v] and
-        returns the result. Strictly equivalent to [add k v Hamt]. *)
-  end
 end
 
 (** Functor building an implementation of the Hamt structure,
